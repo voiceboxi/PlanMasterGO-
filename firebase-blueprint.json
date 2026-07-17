@@ -1,0 +1,23 @@
+{
+  "entities": {
+    "userSettings": {
+      "title": "User Settings",
+      "description": "User preferences and calendar overrides mapped by device ID.",
+      "type": "object",
+      "properties": {
+        "deviceId": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "overrides": { "type": "object" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["deviceId"]
+    }
+  },
+  "firestore": {
+    "user_settings/{deviceId}": {
+      "schema": { "$ref": "#/entities/userSettings" },
+      "description": "User settings stored by sync code (deviceId)."
+    }
+  }
+}
