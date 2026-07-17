@@ -20,6 +20,10 @@ import {
   Coffee,
   ChevronDown,
   Settings,
+  Cloud,
+  Copy,
+  Database,
+  RefreshCw,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -204,7 +208,7 @@ export default function App() {
   const year = viewDate.getFullYear();
 
   const [overrides, setOverrides] = useState<CustomOverrides>(() => {
-    const saved = localStorage.getItem("webmastergo_overrides");
+    const saved = localStorage.getItem("planmastergo_overrides") || localStorage.getItem("webmastergo_overrides") || localStorage.getItem("planmaster_overrides");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -216,7 +220,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem("webmastergo_overrides", JSON.stringify(overrides));
+    localStorage.setItem("planmastergo_overrides", JSON.stringify(overrides));
   }, [overrides]);
 
   // Day Modal State
@@ -248,7 +252,7 @@ export default function App() {
   const [isRestModalOpen, setIsRestModalOpen] = useState(false);
 
   const [restChoices, setRestChoices] = useState<string[]>(() => {
-    const saved = localStorage.getItem("webmastergo_rest_choices");
+    const saved = localStorage.getItem("planmastergo_rest_choices") || localStorage.getItem("webmastergo_rest_choices") || localStorage.getItem("planmaster_rest_choices");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -260,7 +264,7 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem("webmastergo_rest_choices", JSON.stringify(restChoices));
+    localStorage.setItem("planmastergo_rest_choices", JSON.stringify(restChoices));
   }, [restChoices]);
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -282,23 +286,27 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState("");
   const [notificationPhone, setNotificationPhone] = useState("");
-  
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"notifications" | "sync">("notifications");
+  const [importCode, setImportCode] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
 
-  const [deviceId] = useState(() => {
-    let id = localStorage.getItem("webmastergo_device_id");
+  const [deviceId, setDeviceId] = useState(() => {
+    let id = localStorage.getItem("planmastergo_device_id") || localStorage.getItem("webmastergo_device_id") || localStorage.getItem("planmaster_device_id");
     if (!id) {
       id = Array.from(crypto.getRandomValues(new Uint8Array(16)))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
-      localStorage.setItem("webmastergo_device_id", id);
+      localStorage.setItem("planmastergo_device_id", id);
     }
     return id;
   });
 
   useEffect(() => {
     const loadSettings = async () => {
-      const localEmail = localStorage.getItem("webmastergo_email") || "";
-      const localPhone = localStorage.getItem("webmastergo_phone") || "";
+      const localEmail = localStorage.getItem("planmastergo_email") || localStorage.getItem("webmastergo_email") || localStorage.getItem("planmaster_email") || "";
+      const localPhone = localStorage.getItem("planmastergo_phone") || localStorage.getItem("webmastergo_phone") || localStorage.getItem("planmaster_phone") || "";
       setNotificationEmail(localEmail);
       setNotificationPhone(localPhone);
 
@@ -310,15 +318,26 @@ export default function App() {
           const data = docSnap.data();
           if (data.email) {
             setNotificationEmail(data.email);
-            localStorage.setItem("webmastergo_email", data.email);
+            localStorage.setItem("planmastergo_email", data.email);
           }
           if (data.phone) {
             setNotificationPhone(data.phone);
-            localStorage.setItem("webmastergo_phone", data.phone);
+            localStorage.setItem("planmastergo_phone", data.phone);
           }
           if (data.overrides) {
             setOverrides(data.overrides);
-            localStorage.setItem("webmastergo_overrides", JSON.stringify(data.overrides));
+            localStorage.setItem("planmastergo_overrides", JSON.stringify(data.overrides));
+          }
+          if (data.restChoices) {
+            setRestChoices(data.restChoices);
+            localStorage.setItem("planmastergo_rest_choices", JSON.stringify(data.restChoices));
+          }
+          if (data.updatedAt) {
+            try {
+              setLastBackupTime(new Date(data.updatedAt).toLocaleString("fr-FR"));
+            } catch (e) {
+              setLastBackupTime(null);
+            }
           }
         }
       } catch (e) {
@@ -329,7 +348,6 @@ export default function App() {
   }, [deviceId]);
 
   const [isTestingNotification, setIsTestingNotification] = useState(false);
-  
 
   const handleTestNotification = async (type: "email" | "sms") => {
     setIsTestingNotification(true);
@@ -382,17 +400,20 @@ export default function App() {
   };
 
   const handleSaveSettings = async () => {
-    localStorage.setItem("webmastergo_email", notificationEmail);
-    localStorage.setItem("webmastergo_phone", notificationPhone);
+    localStorage.setItem("planmastergo_email", notificationEmail);
+    localStorage.setItem("planmastergo_phone", notificationPhone);
 
     try {
+      const backupTime = new Date().toISOString();
       await setDoc(doc(db, "user_settings", deviceId), {
         deviceId: deviceId,
         email: notificationEmail,
         phone: notificationPhone,
         overrides: overrides,
-        updatedAt: new Date().toISOString(),
+        restChoices: restChoices,
+        updatedAt: backupTime,
       });
+      setLastBackupTime(new Date(backupTime).toLocaleString("fr-FR"));
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, `user_settings/${deviceId}`);
     }
@@ -401,7 +422,7 @@ export default function App() {
     setActiveToast({
       id: "settings-saved",
       title: "Paramètres sauvegardés",
-      subtitle: "Vos contacts ont été mis à jour avec succès.",
+      subtitle: "Vos contacts et votre planning ont été synchronisés avec succès.",
       type: "in-app",
     });
     setTimeout(() => {
@@ -409,6 +430,99 @@ export default function App() {
         current?.id === "settings-saved" ? null : current
       );
     }, 3000);
+  };
+
+  const handleForceBackup = async () => {
+    setIsBackingUp(true);
+    try {
+      const backupTime = new Date().toISOString();
+      await setDoc(doc(db, "user_settings", deviceId), {
+        deviceId: deviceId,
+        email: notificationEmail,
+        phone: notificationPhone,
+        overrides: overrides,
+        restChoices: restChoices,
+        updatedAt: backupTime,
+      });
+      setLastBackupTime(new Date(backupTime).toLocaleString("fr-FR"));
+      
+      setActiveToast({
+        id: "backup-success",
+        title: "Sauvegarde réussie",
+        subtitle: "Vos données de planning sont désormais sauvegardées dans le Cloud Firebase.",
+        type: "in-app",
+      });
+      setTimeout(() => {
+        setActiveToast((current) => current?.id === "backup-success" ? null : current);
+      }, 3000);
+    } catch (e) {
+      console.error("Error backing up settings:", e);
+      handleFirestoreError(e, OperationType.WRITE, `user_settings/${deviceId}`);
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleImportSync = async (codeToImport: string) => {
+    const trimmedCode = codeToImport.trim();
+    if (!trimmedCode) {
+      alert("Veuillez saisir un code de synchronisation valide.");
+      return;
+    }
+    
+    if (!confirm("Attention : l'importation de ce profil va écraser vos données locales actuelles (planning, notes, préférences). Souhaitez-vous continuer ?")) {
+      return;
+    }
+    
+    setIsImporting(true);
+    try {
+      const docRef = doc(db, "user_settings", trimmedCode);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        
+        if (data.email) setNotificationEmail(data.email);
+        if (data.phone) setNotificationPhone(data.phone);
+        if (data.overrides) setOverrides(data.overrides);
+        if (data.restChoices) setRestChoices(data.restChoices);
+        
+        localStorage.setItem("planmastergo_device_id", trimmedCode);
+        if (data.email) localStorage.setItem("planmastergo_email", data.email);
+        if (data.phone) localStorage.setItem("planmastergo_phone", data.phone);
+        if (data.overrides) localStorage.setItem("planmastergo_overrides", JSON.stringify(data.overrides));
+        if (data.restChoices) localStorage.setItem("planmastergo_rest_choices", JSON.stringify(data.restChoices));
+        
+        setDeviceId(trimmedCode);
+        
+        if (data.updatedAt) {
+          try {
+            setLastBackupTime(new Date(data.updatedAt).toLocaleString("fr-FR"));
+          } catch (e) {
+            setLastBackupTime(null);
+          }
+        }
+        
+        setActiveToast({
+          id: "import-success",
+          title: "Importation réussie",
+          subtitle: "Vos données ont été synchronisées avec succès depuis le Cloud.",
+          type: "in-app",
+        });
+        setTimeout(() => {
+          setActiveToast((current) => current?.id === "import-success" ? null : current);
+        }, 4000);
+        
+        setImportCode("");
+      } else {
+        alert("Aucune donnée trouvée pour ce code de synchronisation. Veuillez vérifier le code saisi.");
+      }
+    } catch (e) {
+      console.error("Error importing settings:", e);
+      alert("Erreur lors de la synchronisation avec le serveur. Veuillez réessayer.");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   // Sauvegarde automatique périodique de l'état `overrides`
@@ -421,6 +535,7 @@ export default function App() {
           email: notificationEmail,
           phone: notificationPhone,
           overrides: overrides,
+          restChoices: restChoices,
           updatedAt: new Date().toISOString(),
         });
       } catch (e) {
@@ -428,7 +543,7 @@ export default function App() {
       }
     }, 60000); // 1 minute
     return () => clearInterval(interval);
-  }, [overrides, notificationEmail, notificationPhone, deviceId]);
+  }, [overrides, restChoices, notificationEmail, notificationPhone, deviceId]);
 
   useEffect(() => {
     const key = getDateKey(currentTime);
@@ -1627,10 +1742,10 @@ export default function App() {
       {/* Settings Modal */}
       {isSettingsModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-modal rounded-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="glass-modal rounded-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
               <h3 className="font-bold text-slate-800 text-lg">
-                Paramètres de notification
+                Paramètres & Synchronisation
               </h3>
               <button
                 onClick={() => setIsSettingsModalOpen(false)}
@@ -1639,47 +1754,150 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Adresse Email</label>
-                  <button 
-                    onClick={() => handleTestNotification('email')}
-                    disabled={!notificationEmail || isTestingNotification}
-                    className="text-[10px] bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 px-2 py-1 rounded font-medium transition-colors"
-                  >
-                    {isTestingNotification ? "Test..." : "Tester"}
-                  </button>
-                </div>
-                <input
-                  type="email"
-                  value={notificationEmail}
-                  onChange={(e) => setNotificationEmail(e.target.value)}
-                  placeholder="votre@email.com"
-                  className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Numéro de téléphone (SMS)</label>
-                  <button 
-                    onClick={() => handleTestNotification('sms')}
-                    disabled={!notificationPhone || isTestingNotification}
-                    className="text-[10px] bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 px-2 py-1 rounded font-medium transition-colors"
-                  >
-                    {isTestingNotification ? "Test..." : "Tester"}
-                  </button>
-                </div>
-                <input
-                  type="tel"
-                  value={notificationPhone}
-                  onChange={(e) => setNotificationPhone(e.target.value)}
-                  placeholder="+33612345678"
-                  className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
-                />
-              </div>
-              <p className="text-xs text-slate-500">Ces informations sont sauvegardées localement pour les rappels de votre planning.</p>
+
+            {/* Tab selection */}
+            <div className="flex border-b border-slate-100 bg-slate-50/20 px-4">
+              <button
+                onClick={() => setActiveSettingsTab("notifications")}
+                className={`flex-1 py-3 text-center text-sm font-semibold transition-all border-b-2 flex justify-center items-center gap-2 ${
+                  activeSettingsTab === "notifications"
+                    ? "border-[#10a37f] text-[#10a37f]"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Bell className="w-4 h-4" />
+                Notifications
+              </button>
+              <button
+                onClick={() => setActiveSettingsTab("sync")}
+                className={`flex-1 py-3 text-center text-sm font-semibold transition-all border-b-2 flex justify-center items-center gap-2 ${
+                  activeSettingsTab === "sync"
+                    ? "border-[#10a37f] text-[#10a37f]"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Cloud className="w-4 h-4" />
+                Synchro Cloud
+              </button>
             </div>
+
+            <div className="p-6">
+              {activeSettingsTab === "notifications" ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Adresse Email</label>
+                      <button 
+                        onClick={() => handleTestNotification('email')}
+                        disabled={!notificationEmail || isTestingNotification}
+                        className="text-[10px] bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 px-2 py-1 rounded font-medium transition-colors"
+                      >
+                        {isTestingNotification ? "Test..." : "Tester"}
+                      </button>
+                    </div>
+                    <input
+                      type="email"
+                      value={notificationEmail}
+                      onChange={(e) => setNotificationEmail(e.target.value)}
+                      placeholder="votre@email.com"
+                      className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Numéro de téléphone (SMS)</label>
+                      <button 
+                        onClick={() => handleTestNotification('sms')}
+                        disabled={!notificationPhone || isTestingNotification}
+                        className="text-[10px] bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 px-2 py-1 rounded font-medium transition-colors"
+                      >
+                        {isTestingNotification ? "Test..." : "Tester"}
+                      </button>
+                    </div>
+                    <input
+                      type="tel"
+                      value={notificationPhone}
+                      onChange={(e) => setNotificationPhone(e.target.value)}
+                      placeholder="+33612345678"
+                      className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">Ces informations reçoivent vos rappels de planning configurés (in-app, email ou SMS).</p>
+                </div>
+              ) : (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      Votre Code de Synchronisation
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-700 overflow-x-auto whitespace-nowrap select-all">
+                        {deviceId}
+                      </code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(deviceId);
+                          setActiveToast({
+                            id: "copy-code",
+                            title: "Code copié !",
+                            subtitle: "Le code a été copié dans votre presse-papiers.",
+                            type: "in-app",
+                          });
+                          setTimeout(() => setActiveToast(current => current?.id === "copy-code" ? null : current), 3000);
+                        }}
+                        className="p-2.5 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 transition-colors shrink-0"
+                        title="Copier le code"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-2 leading-relaxed">
+                      Partagez ce code ou saisissez-le sur un autre hébergeur (comme Vercel) pour restaurer instantanément vos données.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-slate-50/50 p-3 rounded-xl border border-dashed border-slate-200">
+                    <div className="text-xs">
+                      <span className="font-semibold text-slate-500 block uppercase tracking-wider text-[9px] mb-0.5">Dernière sauvegarde :</span>
+                      <span className="text-slate-700 font-bold font-mono">
+                        {lastBackupTime || "Aucune sauvegarde"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleForceBackup}
+                      disabled={isBackingUp}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-semibold rounded-xl transition-all text-xs border border-slate-200 active:scale-95 shrink-0 shadow-sm"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isBackingUp ? "animate-spin" : ""}`} />
+                      {isBackingUp ? "Synchro..." : "Sauvegarder"}
+                    </button>
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-4">
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Importer un planning existant
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={importCode}
+                        onChange={(e) => setImportCode(e.target.value)}
+                        placeholder="Saisir un code de synchro"
+                        className="flex-1 border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-xs outline-none transition-all bg-white font-mono"
+                      />
+                      <button
+                        onClick={() => handleImportSync(importCode)}
+                        disabled={isImporting || !importCode.trim()}
+                        className="px-4 py-2 bg-[#10a37f] hover:bg-[#0c8c6c] disabled:opacity-50 text-white font-semibold rounded-xl text-xs transition-colors shadow-sm whitespace-nowrap active:scale-95"
+                      >
+                        {isImporting ? "Import..." : "Importer"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
               <button
                 onClick={() => setIsSettingsModalOpen(false)}
