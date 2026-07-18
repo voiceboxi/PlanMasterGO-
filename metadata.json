@@ -1,6 +1,6 @@
 {
   "name": "PlanMasterGO",
-  "description": "Planning Repos 1* (Professionnel)",
+  "description": "Planning professionnel avec gestion des journées additionnelles et synchronisation cloud",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

@@ -24,6 +24,9 @@ import {
   Copy,
   Database,
   RefreshCw,
+  Lock,
+  Unlock,
+  Shield,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -95,7 +98,7 @@ interface LegendItem {
 
 const LEGEND: LegendItem[] = [
   { id: "rest", label: "Repos", dotClass: "bg-[#10a37f]" },
-  { id: "rest1", label: "Repos 1*", dotClass: "bg-[#059669]" },
+  { id: "rest1", label: "Journée additionnelle", dotClass: "bg-[#C7CF00]" },
   { id: "work", label: "Travail", dotClass: "bg-[#fbbf24]" },
   { id: "training", label: "Formation", dotClass: "bg-[#E1712B]" },
   { id: "holiday", label: "Congés", dotClass: "bg-[#A10684]" },
@@ -286,11 +289,16 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState("");
   const [notificationPhone, setNotificationPhone] = useState("");
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"notifications" | "sync">("notifications");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"notifications" | "sync" | "security">("notifications");
   const [importCode, setImportCode] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
+  
+  const [appPin, setAppPin] = useState<string>("");
+  const [isLocked, setIsLocked] = useState(false);
+  const [unlockPinInput, setUnlockPinInput] = useState("");
+  const [pinError, setPinError] = useState(false);
 
   const [deviceId, setDeviceId] = useState(() => {
     let id = localStorage.getItem("planmastergo_device_id") || localStorage.getItem("webmastergo_device_id") || localStorage.getItem("planmaster_device_id");
@@ -307,8 +315,15 @@ export default function App() {
     const loadSettings = async () => {
       const localEmail = localStorage.getItem("planmastergo_email") || localStorage.getItem("webmastergo_email") || localStorage.getItem("planmaster_email") || "";
       const localPhone = localStorage.getItem("planmastergo_phone") || localStorage.getItem("webmastergo_phone") || localStorage.getItem("planmaster_phone") || "";
+      const localPin = localStorage.getItem("planmastergo_pin") || "";
+      
       setNotificationEmail(localEmail);
       setNotificationPhone(localPhone);
+      setAppPin(localPin);
+      
+      if (localPin) {
+        setIsLocked(true);
+      }
 
       try {
         const docRef = doc(db, "user_settings", deviceId);
@@ -316,6 +331,11 @@ export default function App() {
         
         if (docSnap.exists()) {
           const data = docSnap.data();
+          if (data.pin) {
+            setAppPin(data.pin);
+            localStorage.setItem("planmastergo_pin", data.pin);
+            setIsLocked(true);
+          }
           if (data.email) {
             setNotificationEmail(data.email);
             localStorage.setItem("planmastergo_email", data.email);
@@ -402,6 +422,7 @@ export default function App() {
   const handleSaveSettings = async () => {
     localStorage.setItem("planmastergo_email", notificationEmail);
     localStorage.setItem("planmastergo_phone", notificationPhone);
+    localStorage.setItem("planmastergo_pin", appPin);
 
     try {
       const backupTime = new Date().toISOString();
@@ -409,6 +430,7 @@ export default function App() {
         deviceId: deviceId,
         email: notificationEmail,
         phone: notificationPhone,
+        pin: appPin,
         overrides: overrides,
         restChoices: restChoices,
         updatedAt: backupTime,
@@ -440,6 +462,7 @@ export default function App() {
         deviceId: deviceId,
         email: notificationEmail,
         phone: notificationPhone,
+        pin: appPin,
         overrides: overrides,
         restChoices: restChoices,
         updatedAt: backupTime,
@@ -481,6 +504,23 @@ export default function App() {
       
       if (docSnap.exists()) {
         const data = docSnap.data();
+        
+        if (data.pin) {
+          const enteredPin = prompt("Ce profil est protégé par un code PIN. Veuillez entrer le code à 4 chiffres :");
+          if (enteredPin !== data.pin) {
+            alert("Code PIN incorrect. L'importation a été annulée.");
+            setIsImporting(false);
+            return;
+          }
+        }
+        
+        if (data.pin) {
+          setAppPin(data.pin);
+          localStorage.setItem("planmastergo_pin", data.pin);
+        } else {
+          setAppPin("");
+          localStorage.removeItem("planmastergo_pin");
+        }
         
         if (data.email) setNotificationEmail(data.email);
         if (data.phone) setNotificationPhone(data.phone);
@@ -534,6 +574,7 @@ export default function App() {
           deviceId: deviceId,
           email: notificationEmail,
           phone: notificationPhone,
+          pin: appPin,
           overrides: overrides,
           restChoices: restChoices,
           updatedAt: new Date().toISOString(),
@@ -543,7 +584,7 @@ export default function App() {
       }
     }, 60000); // 1 minute
     return () => clearInterval(interval);
-  }, [overrides, restChoices, notificationEmail, notificationPhone, deviceId]);
+  }, [overrides, restChoices, notificationEmail, notificationPhone, appPin, deviceId]);
 
   useEffect(() => {
     const key = getDateKey(currentTime);
@@ -878,7 +919,7 @@ export default function App() {
       } else if (state === "rest") {
         stateClasses = "bg-[#10a37f] text-white"; // Green
       } else if (state === "rest1") {
-        stateClasses = "bg-[#059669] text-white"; // Emerald
+        stateClasses = "bg-[#C7CF00] text-slate-800"; // Journée additionnelle
       } else if (state === "training") {
         stateClasses = "bg-[#E1712B] text-white"; // Orange
       } else if (state === "holiday") {
@@ -975,6 +1016,65 @@ export default function App() {
       </div>
     );
   };
+
+  if (isLocked) {
+    return (
+      <div className="min-h-screen bg-slate-50 font-sans flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 p-8 text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-16 h-16 bg-[#10a37f]/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Lock className="w-8 h-8 text-[#10a37f]" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Application Protégée</h2>
+          <p className="text-sm text-slate-500 mb-8">
+            Veuillez entrer votre Code PIN à 4 chiffres pour accéder à votre planning.
+          </p>
+          
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (unlockPinInput === appPin) {
+              setIsLocked(false);
+              setPinError(false);
+              setUnlockPinInput("");
+            } else {
+              setPinError(true);
+              setUnlockPinInput("");
+            }
+          }}>
+            <input
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              autoFocus
+              value={unlockPinInput}
+              onChange={(e) => {
+                setUnlockPinInput(e.target.value.replace(/[^0-9]/g, ''));
+                setPinError(false);
+              }}
+              className={`w-full max-w-[200px] mx-auto text-center text-3xl font-mono tracking-[0.5em] py-4 rounded-xl border-2 transition-all outline-none ${
+                pinError 
+                  ? "border-red-300 bg-red-50 text-red-600 focus:border-red-400 focus:ring-red-100" 
+                  : "border-slate-200 bg-slate-50 focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20"
+              }`}
+            />
+            {pinError && (
+              <p className="text-red-500 text-sm font-medium mt-3 animate-in slide-in-from-top-1">
+                Code PIN incorrect
+              </p>
+            )}
+            
+            <button
+              type="submit"
+              disabled={unlockPinInput.length !== 4}
+              className="mt-8 w-full py-3.5 bg-[#10a37f] hover:bg-[#0c8c6c] disabled:opacity-50 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+            >
+              <Unlock className="w-5 h-5" />
+              Déverrouiller
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-modern-white font-sans pb-12 flex flex-col items-center">
@@ -1125,6 +1225,15 @@ export default function App() {
               <Share2 className="w-4 h-4" />
               Partager
             </button>
+            {appPin && (
+              <button
+                onClick={() => setIsLocked(true)}
+                className="flex items-center justify-center p-2.5 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors shadow-sm active:scale-95"
+                title="Verrouiller l'application"
+              >
+                <Lock className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={() => setIsSettingsModalOpen(true)}
               className="flex items-center justify-center p-2.5 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors shadow-sm active:scale-95"
@@ -1160,7 +1269,7 @@ export default function App() {
           <div
             className={`flex flex-wrap items-center justify-center gap-3 md:gap-6 overflow-hidden transition-all duration-500 ease-in-out ${isLegendExpanded ? "max-h-[500px] md:max-h-20 opacity-100 mt-2" : "max-h-0 opacity-0 m-0"}`}
           >
-            {LEGEND.filter(item => item.id !== "rest1").map((item) => (
+            {LEGEND.map((item) => (
               <div
                 key={item.id}
                 className="flex items-center gap-2 whitespace-nowrap"
@@ -1241,7 +1350,7 @@ export default function App() {
                         else if (state === "rest")
                           bgClass = "bg-[#10a37f] text-white";
                         else if (state === "rest1")
-                          bgClass = "bg-[#059669] text-white";
+                          bgClass = "bg-[#C7CF00] text-slate-800";
                         else if (state === "training")
                           bgClass = "bg-[#E1712B] text-white";
                         else if (state === "holiday")
@@ -1274,7 +1383,7 @@ export default function App() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center gap-6 flex-wrap">
-              {LEGEND.filter((l) => l.id !== "none" && l.id !== "sick" && l.id !== "rest1").map(
+              {LEGEND.filter((l) => l.id !== "none" && l.id !== "sick").map(
                 (l) => (
                   <div key={l.id} className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${l.dotClass}`}></div>
@@ -1312,7 +1421,7 @@ export default function App() {
                   </div>
                   {/* Legend */}
                   <div className="flex flex-col gap-2 bg-slate-50 p-4 rounded-xl shadow-sm border border-slate-100">
-                    {LEGEND.filter((l) => l.id !== "none" && l.id !== "sick" && l.id !== "rest1")
+                    {LEGEND.filter((l) => l.id !== "none" && l.id !== "sick")
                       .reduce((result: any[], value, i, array) => {
                         if (i % 2 === 0) result.push(array.slice(i, i + 2));
                         return result;
@@ -1375,7 +1484,7 @@ export default function App() {
                         else if (state === "rest")
                           bgClass = "bg-[#10a37f] text-white shadow-sm";
                         else if (state === "rest1")
-                          bgClass = "bg-[#059669] text-white shadow-sm";
+                          bgClass = "bg-[#C7CF00] text-slate-800 shadow-sm";
                         else if (state === "training")
                           bgClass = "bg-[#E1712B] text-white shadow-sm";
                         else if (state === "holiday")
@@ -1445,7 +1554,7 @@ export default function App() {
                           let color = "#94a3b8";
                           if (stateId === "work") color = "#fde047";
                           if (stateId === "rest") color = "#10a37f";
-                          if (stateId === "rest1") color = "#059669";
+                          if (stateId === "rest1") color = "#C7CF00";
                           if (stateId === "training") color = "#E1712B";
                           if (stateId === "holiday") color = "#A10684";
 
@@ -1756,28 +1865,39 @@ export default function App() {
             </div>
 
             {/* Tab selection */}
-            <div className="flex border-b border-slate-100 bg-slate-50/20 px-4">
+            <div className="flex border-b border-slate-100 bg-slate-50/20 px-2 sm:px-4">
               <button
                 onClick={() => setActiveSettingsTab("notifications")}
-                className={`flex-1 py-3 text-center text-sm font-semibold transition-all border-b-2 flex justify-center items-center gap-2 ${
+                className={`flex-1 py-3 text-center text-[11px] sm:text-sm font-semibold transition-all border-b-2 flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-2 ${
                   activeSettingsTab === "notifications"
                     ? "border-[#10a37f] text-[#10a37f]"
                     : "border-transparent text-slate-500 hover:text-slate-800"
                 }`}
               >
                 <Bell className="w-4 h-4" />
-                Notifications
+                <span className="hidden sm:inline">Notifications</span>
               </button>
               <button
                 onClick={() => setActiveSettingsTab("sync")}
-                className={`flex-1 py-3 text-center text-sm font-semibold transition-all border-b-2 flex justify-center items-center gap-2 ${
+                className={`flex-1 py-3 text-center text-[11px] sm:text-sm font-semibold transition-all border-b-2 flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-2 ${
                   activeSettingsTab === "sync"
                     ? "border-[#10a37f] text-[#10a37f]"
                     : "border-transparent text-slate-500 hover:text-slate-800"
                 }`}
               >
                 <Cloud className="w-4 h-4" />
-                Synchro Cloud
+                <span className="hidden sm:inline">Cloud</span>
+              </button>
+              <button
+                onClick={() => setActiveSettingsTab("security")}
+                className={`flex-1 py-3 text-center text-[11px] sm:text-sm font-semibold transition-all border-b-2 flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-2 ${
+                  activeSettingsTab === "security"
+                    ? "border-[#10a37f] text-[#10a37f]"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Shield className="w-4 h-4" />
+                <span className="hidden sm:inline">Sécurité</span>
               </button>
             </div>
 
@@ -1824,7 +1944,7 @@ export default function App() {
                   </div>
                   <p className="text-xs text-slate-500">Ces informations reçoivent vos rappels de planning configurés (in-app, email ou SMS).</p>
                 </div>
-              ) : (
+              ) : activeSettingsTab === "sync" ? (
                 <div className="space-y-4 animate-in fade-in duration-150">
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
@@ -1895,7 +2015,47 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-              )}
+              ) : activeSettingsTab === "security" ? (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div className="flex justify-between items-center mb-3">
+                      <span className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Protection par Code PIN
+                      </span>
+                      <Shield className={`w-4 h-4 ${appPin ? "text-[#10a37f]" : "text-slate-400"}`} />
+                    </div>
+                    <p className="text-[11px] text-slate-500 mb-4 leading-relaxed">
+                      Sécurisez l'accès à votre application et protégez vos données lors de l'importation de votre profil sur un autre appareil.
+                    </p>
+                    
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-1">
+                          {appPin ? "Modifier le Code PIN" : "Créer un Code PIN"}
+                        </label>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={appPin}
+                          onChange={(e) => setAppPin(e.target.value.replace(/[^0-9]/g, ''))}
+                          placeholder="Code à 4 chiffres"
+                          className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white font-mono tracking-widest text-center"
+                        />
+                      </div>
+                      
+                      {appPin && (
+                        <button
+                          onClick={() => setAppPin("")}
+                          className="w-full py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                        >
+                          Désactiver la protection
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">

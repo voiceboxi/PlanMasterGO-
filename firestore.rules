@@ -11,6 +11,7 @@ service cloud.firestore {
              data.deviceId is string && data.deviceId.size() <= 128 && data.deviceId.matches('^[a-zA-Z0-9_\\-]+$') &&
              data.get('email', '') is string &&
              data.get('phone', '') is string &&
+             data.get('pin', '') is string &&
              data.get('updatedAt', '') is string;
     }
 
