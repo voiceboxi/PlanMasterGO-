@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,6 +27,7 @@ import {
   Lock,
   Unlock,
   Shield,
+  Smartphone,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -222,8 +223,14 @@ export default function App() {
     return {};
   });
 
+  const isFirstMountOverrides = useRef(true);
   useEffect(() => {
     localStorage.setItem("planmastergo_overrides", JSON.stringify(overrides));
+    if (isFirstMountOverrides.current) {
+      isFirstMountOverrides.current = false;
+    } else {
+      localStorage.setItem("planmastergo_local_update_time", Date.now().toString());
+    }
   }, [overrides]);
 
   // Day Modal State
@@ -266,8 +273,14 @@ export default function App() {
     return new Array(8).fill("");
   });
 
+  const isFirstMountRest = useRef(true);
   useEffect(() => {
     localStorage.setItem("planmastergo_rest_choices", JSON.stringify(restChoices));
+    if (isFirstMountRest.current) {
+      isFirstMountRest.current = false;
+    } else {
+      localStorage.setItem("planmastergo_local_update_time", Date.now().toString());
+    }
   }, [restChoices]);
 
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -279,6 +292,13 @@ export default function App() {
     title: string;
     subtitle: string;
     type: string;
+  } | null>(null);
+
+  const [simulatedNotification, setSimulatedNotification] = useState<{
+    type: "email" | "sms";
+    to: string;
+    message: string;
+    info: string;
   } | null>(null);
 
   useEffect(() => {
@@ -299,15 +319,31 @@ export default function App() {
   const [isLocked, setIsLocked] = useState(false);
   const [unlockPinInput, setUnlockPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
+  const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 
   const [deviceId, setDeviceId] = useState(() => {
-    let id = localStorage.getItem("planmastergo_device_id") || localStorage.getItem("webmastergo_device_id") || localStorage.getItem("planmaster_device_id");
+    const params = new URLSearchParams(window.location.search);
+    let id = params.get("id");
+    
+    if (!id) {
+      id = localStorage.getItem("planmastergo_device_id") || localStorage.getItem("webmastergo_device_id") || localStorage.getItem("planmaster_device_id");
+    }
+    
     if (!id) {
       id = Array.from(crypto.getRandomValues(new Uint8Array(16)))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
-      localStorage.setItem("planmastergo_device_id", id);
     }
+    
+    localStorage.setItem("planmastergo_device_id", id);
+    
+    // Mettre à jour l'URL avec l'ID pour persister après actualisation dans l'iframe
+    if (!params.has("id")) {
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set("id", id);
+      window.history.replaceState({}, "", newUrl.toString());
+    }
+    
     return id;
   });
 
@@ -331,27 +367,43 @@ export default function App() {
         
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.pin) {
-            setAppPin(data.pin);
-            localStorage.setItem("planmastergo_pin", data.pin);
-            setIsLocked(true);
+          let shouldApplyFirebaseData = true;
+
+          if (data.updatedAt) {
+            const firebaseTime = new Date(data.updatedAt).getTime();
+            const localTimeStr = localStorage.getItem("planmastergo_local_update_time");
+            if (localTimeStr) {
+              const localTime = parseInt(localTimeStr, 10);
+              if (localTime > firebaseTime) {
+                shouldApplyFirebaseData = false;
+              }
+            }
           }
-          if (data.email) {
-            setNotificationEmail(data.email);
-            localStorage.setItem("planmastergo_email", data.email);
+
+          if (shouldApplyFirebaseData) {
+            if (data.pin) {
+              setAppPin(data.pin);
+              localStorage.setItem("planmastergo_pin", data.pin);
+              setIsLocked(true);
+            }
+            if (data.email) {
+              setNotificationEmail(data.email);
+              localStorage.setItem("planmastergo_email", data.email);
+            }
+            if (data.phone) {
+              setNotificationPhone(data.phone);
+              localStorage.setItem("planmastergo_phone", data.phone);
+            }
+            if (data.overrides) {
+              setOverrides(data.overrides);
+              localStorage.setItem("planmastergo_overrides", JSON.stringify(data.overrides));
+            }
+            if (data.restChoices) {
+              setRestChoices(data.restChoices);
+              localStorage.setItem("planmastergo_rest_choices", JSON.stringify(data.restChoices));
+            }
           }
-          if (data.phone) {
-            setNotificationPhone(data.phone);
-            localStorage.setItem("planmastergo_phone", data.phone);
-          }
-          if (data.overrides) {
-            setOverrides(data.overrides);
-            localStorage.setItem("planmastergo_overrides", JSON.stringify(data.overrides));
-          }
-          if (data.restChoices) {
-            setRestChoices(data.restChoices);
-            localStorage.setItem("planmastergo_rest_choices", JSON.stringify(data.restChoices));
-          }
+
           if (data.updatedAt) {
             try {
               setLastBackupTime(new Date(data.updatedAt).toLocaleString("fr-FR"));
@@ -362,6 +414,8 @@ export default function App() {
         }
       } catch (e) {
         handleFirestoreError(e, OperationType.GET, `user_settings/${deviceId}`);
+      } finally {
+        setIsSettingsLoaded(true);
       }
     };
     loadSettings();
@@ -395,15 +449,33 @@ export default function App() {
         throw new Error(data.error || "Erreur lors de l'envoi");
       }
       
-      setActiveToast({
-        id: "test-success",
-        title: "Test réussi",
-        subtitle: `Le test ${type.toUpperCase()} a été envoyé avec succès.`,
-        type: "in-app",
-      });
-      setTimeout(() => {
-        setActiveToast((current) => current?.id === "test-success" ? null : current);
-      }, 4000);
+      if (data.simulated) {
+        setSimulatedNotification({
+          type: type,
+          to: to,
+          message: data.message || "Ceci est un test de PlanMasterGO.",
+          info: data.info || ""
+        });
+        setActiveToast({
+          id: "test-simulated",
+          title: "Simulation active",
+          subtitle: `Le test ${type.toUpperCase()} a été simulé à l'écran.`,
+          type: type,
+        });
+        setTimeout(() => {
+          setActiveToast((current) => current?.id === "test-simulated" ? null : current);
+        }, 4000);
+      } else {
+        setActiveToast({
+          id: "test-success",
+          title: "Test réussi",
+          subtitle: `Le test ${type.toUpperCase()} a été envoyé avec succès.`,
+          type: "in-app",
+        });
+        setTimeout(() => {
+          setActiveToast((current) => current?.id === "test-success" ? null : current);
+        }, 4000);
+      }
     } catch (e: any) {
       setActiveToast({
         id: "test-error",
@@ -423,6 +495,7 @@ export default function App() {
     localStorage.setItem("planmastergo_email", notificationEmail);
     localStorage.setItem("planmastergo_phone", notificationPhone);
     localStorage.setItem("planmastergo_pin", appPin);
+    localStorage.setItem("planmastergo_local_update_time", Date.now().toString());
 
     try {
       const backupTime = new Date().toISOString();
@@ -565,10 +638,11 @@ export default function App() {
     }
   };
 
-  // Sauvegarde automatique périodique de l'état `overrides`
+  // Sauvegarde automatique immédiate
   useEffect(() => {
-    if (!deviceId) return;
-    const interval = setInterval(async () => {
+    if (!deviceId || !isSettingsLoaded) return;
+    
+    const saveToCloud = async () => {
       try {
         await setDoc(doc(db, "user_settings", deviceId), {
           deviceId: deviceId,
@@ -579,12 +653,14 @@ export default function App() {
           restChoices: restChoices,
           updatedAt: new Date().toISOString(),
         });
+        setLastBackupTime(new Date().toLocaleString("fr-FR"));
       } catch (e) {
         console.error("Auto backup error:", e);
       }
-    }, 60000); // 1 minute
-    return () => clearInterval(interval);
-  }, [overrides, restChoices, notificationEmail, notificationPhone, appPin, deviceId]);
+    };
+    
+    saveToCloud();
+  }, [overrides, restChoices, notificationEmail, notificationPhone, appPin, deviceId, isSettingsLoaded]);
 
   useEffect(() => {
     const key = getDateKey(currentTime);
@@ -614,15 +690,23 @@ export default function App() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ type: "email", to: notificationEmail, message: dayData.note || "Nouvel événement" })
             }).then(async res => {
+              const text = await res.text();
+              let data: any = {};
+              try { data = JSON.parse(text); } catch(e) {}
+              
               if (!res.ok) {
-                const text = await res.text();
-                let data: any = {};
-                try { data = JSON.parse(text); } catch(e) {}
                 setActiveToast({
                   id: reminderId + "-error",
                   title: "Erreur Email",
                   subtitle: data.error || "L'API backend est introuvable.",
                   type: "in-app"
+                });
+              } else if (data.simulated) {
+                setSimulatedNotification({
+                  type: "email",
+                  to: notificationEmail,
+                  message: dayData.note || "Nouvel événement",
+                  info: data.info || ""
                 });
               }
             }).catch(console.error);
@@ -633,15 +717,23 @@ export default function App() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ type: "sms", to: notificationPhone, message: dayData.note || "Nouvel événement" })
             }).then(async res => {
+              const text = await res.text();
+              let data: any = {};
+              try { data = JSON.parse(text); } catch(e) {}
+              
               if (!res.ok) {
-                const text = await res.text();
-                let data: any = {};
-                try { data = JSON.parse(text); } catch(e) {}
                 setActiveToast({
                   id: reminderId + "-error",
                   title: "Erreur SMS",
                   subtitle: data.error || "L'API backend est introuvable.",
                   type: "in-app"
+                });
+              } else if (data.simulated) {
+                setSimulatedNotification({
+                  type: "sms",
+                  to: notificationPhone,
+                  message: dayData.note || "Nouvel événement",
+                  info: data.info || ""
                 });
               }
             }).catch(console.error);
@@ -1845,6 +1937,175 @@ export default function App() {
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+      )}
+
+      {/* Simulation Modal */}
+      {simulatedNotification && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/80">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#10a37f]/10 rounded-xl text-[#10a37f]">
+                  <Bell className="w-5 h-5 animate-bounce" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base">
+                    Simulation de Notification
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium">Mode de test visuel interactif</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSimulatedNotification(null)}
+                className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Informative Banner */}
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3 text-amber-300 text-xs leading-relaxed">
+                <span className="text-base select-none">🔔</span>
+                <div>
+                  <p className="font-semibold mb-0.5 text-amber-200">Aucun secret SMTP / Twilio détecté</p>
+                  <p>
+                    Pour de vrais envois, veuillez ajouter vos identifiants dans les <strong>Secrets</strong> de l'application (le bouton d'engrenage en haut à droite de Google AI Studio).
+                  </p>
+                  <p className="mt-1 font-medium text-amber-400">
+                    PlanMasterGO simule le message ci-dessous en temps réel pour tester votre configuration !
+                  </p>
+                </div>
+              </div>
+
+              {/* Smartphone Preview */}
+              {simulatedNotification.type === "sms" ? (
+                <div className="mx-auto max-w-[280px] bg-slate-950 border-[6px] border-slate-800 rounded-[36px] overflow-hidden shadow-inner relative aspect-[9/16] flex flex-col">
+                  {/* Speaker & Camera notches */}
+                  <div className="absolute top-2 left-1/2 -translate-x-1/2 w-20 h-4 bg-slate-800 rounded-full flex justify-center items-center gap-2 z-20">
+                    <div className="w-8 h-1 bg-slate-900 rounded-full"></div>
+                    <div className="w-2 h-2 bg-slate-900 rounded-full"></div>
+                  </div>
+                  
+                  {/* Top Mobile Bar */}
+                  <div className="pt-7 px-4 pb-2 flex justify-between items-center text-[10px] text-slate-400 font-medium font-mono select-none">
+                    <span>12:15</span>
+                    <div className="flex items-center gap-1">
+                      <span>5G</span>
+                      <div className="w-4 h-2 border border-slate-400 rounded-sm p-[1px] flex items-center">
+                        <div className="h-full w-3 bg-slate-400 rounded-xs"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Messenger Header */}
+                  <div className="bg-slate-900/90 py-2.5 px-4 border-b border-slate-800 flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold font-sans">
+                      P
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-white leading-tight">PlanMasterGO</p>
+                      <p className="text-[9px] text-slate-400 leading-none">A l'instant</p>
+                    </div>
+                  </div>
+
+                  {/* Message Screen Area */}
+                  <div className="flex-1 p-4 bg-slate-950 overflow-y-auto flex flex-col justify-end space-y-4">
+                    <div className="text-[10px] text-slate-500 text-center font-medium my-1">
+                      Aujourd'hui
+                    </div>
+                    
+                    {/* Receiver Address */}
+                    <div className="text-[9px] text-slate-500 text-center font-mono tracking-wide">
+                      Destinataire : {simulatedNotification.to}
+                    </div>
+
+                    {/* Chat Bubble */}
+                    <div className="bg-slate-800 text-white rounded-2xl rounded-bl-none p-3 text-xs leading-relaxed max-w-[85%] self-start border border-slate-700/50">
+                      {simulatedNotification.message}
+                      <span className="block text-[9px] text-slate-400 text-right mt-1 font-mono">
+                        12:15
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Message Compose Bar Mockup */}
+                  <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
+                    <div className="flex-1 bg-slate-950 rounded-full px-3 py-1 text-[10px] text-slate-500 font-medium select-none">
+                      iMessage
+                    </div>
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white">
+                      <span className="text-xs font-bold font-sans">↑</span>
+                    </div>
+                  </div>
+
+                  {/* Home Indicator */}
+                  <div className="pb-1.5 flex justify-center bg-slate-900">
+                    <div className="w-20 h-1 bg-slate-700 rounded-full"></div>
+                  </div>
+                </div>
+              ) : (
+                /* Email Preview */
+                <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-lg flex flex-col font-sans">
+                  {/* Browser top tabs */}
+                  <div className="bg-slate-900/90 py-2.5 px-4 border-b border-slate-800 flex items-center justify-between">
+                    <div className="flex gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+                      <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono tracking-wider truncate max-w-[200px]">
+                      Aperçu Email Client
+                    </span>
+                    <div className="w-4"></div>
+                  </div>
+
+                  {/* Email Headers */}
+                  <div className="p-4 border-b border-slate-800 space-y-1.5 text-xs text-slate-300">
+                    <div>
+                      <span className="text-slate-500 font-medium inline-block w-14">De :</span>
+                      <span className="font-semibold text-[#10a37f]">PlanMasterGO</span> 
+                      <span className="text-slate-500"> &lt;simulation@planmaster.go&gt;</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-medium inline-block w-14">À :</span>
+                      <span className="text-slate-200 font-mono">{simulatedNotification.to}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 font-medium inline-block w-14">Sujet :</span>
+                      <span className="font-bold text-white">Rappel PlanMasterGO 📅</span>
+                    </div>
+                  </div>
+
+                  {/* Email Body */}
+                  <div className="p-6 bg-slate-900 text-slate-200 text-sm leading-relaxed min-h-[140px] flex flex-col justify-between">
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm">
+                      <div className="flex items-center gap-2 text-[#10a37f] font-bold text-xs uppercase tracking-wider mb-2.5">
+                        <Mail className="w-4 h-4" />
+                        Nouveau Message de Rappel
+                      </div>
+                      <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{simulatedNotification.message}</p>
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-500">
+                      <span>Généré automatiquement par PlanMasterGO</span>
+                      <span className="font-mono">Réf: RAP-{Math.floor(Math.random() * 9000) + 1000}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-slate-950 border-t border-slate-800 flex justify-end">
+              <button
+                onClick={() => setSimulatedNotification(null)}
+                className="px-5 py-2 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-semibold text-xs rounded-xl transition-all shadow-sm shadow-[#10a37f]/10 active:scale-95"
+              >
+                Fermer l'aperçu
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

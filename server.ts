@@ -24,7 +24,14 @@ app.post("/api/notify", async (req, res) => {
       const fromPhone = process.env.TWILIO_PHONE_NUMBER;
 
       if (!accountSid || !authToken || !fromPhone) {
-         return res.status(500).json({ error: "Pour envoyer des SMS, configurez les variables d'environnement TWILIO_* dans les paramètres (Secrets) de Vercel." });
+         return res.json({ 
+           success: true, 
+           simulated: true, 
+           type: "sms", 
+           to, 
+           message,
+           info: "Pour de vrais envois de SMS, configurez les variables d'environnement TWILIO_* (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER) dans les Secrets des paramètres de Google AI Studio (bouton engrenage)." 
+         });
       }
       
       const twilioClient = twilio(accountSid, authToken);
@@ -42,7 +49,14 @@ app.post("/api/notify", async (req, res) => {
       const pass = process.env.SMTP_PASS;
 
       if (!host || !user || !pass) {
-        return res.status(500).json({ error: "Pour envoyer des emails, configurez les variables d'environnement SMTP_* dans les paramètres (Secrets) de Vercel." });
+        return res.json({
+          success: true,
+          simulated: true,
+          type: "email",
+          to,
+          message,
+          info: "Pour de vrais envois d'emails, configurez les variables d'environnement SMTP_* (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) dans les Secrets des paramètres de Google AI Studio (bouton engrenage)."
+        });
       }
 
       const transporter = nodemailer.createTransport({
