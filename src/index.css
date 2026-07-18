@@ -1,37 +1,51 @@
 @import "tailwindcss";
 
 html, body {
-  background-color: transparent;
+  background-color: #f8fafc;
+  min-height: 100vh;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  background-image: 
+    linear-gradient(135deg, rgba(240, 253, 250, 0.7) 0%, rgba(241, 245, 249, 0.75) 50%, rgba(226, 232, 240, 0.65) 100%),
+    url("./assets/images/grayscale_geometric_bg_1784403607956.jpg");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  will-change: transform;
 }
 
 .bg-modern-white {
-  background-color: #f8fafc;
-  background-image: 
-    radial-gradient(circle at 0% 0%, #ffffff 0%, transparent 50%),
-    radial-gradient(circle at 100% 100%, #e2e8f0 0%, transparent 50%);
-  background-attachment: fixed;
+  background-color: transparent;
 }
 
 .glass-panel {
-  background-color: rgba(255, 255, 255, 0.8);
+  background-color: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 1);
-  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .glass-header {
-  background-color: rgba(255, 255, 255, 0.85);
+  background-color: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-bottom: 1px solid rgba(255, 255, 255, 1);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03);
 }
 
 .glass-modal {
-  background-color: rgba(255, 255, 255, 0.95);
+  background-color: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
-  border: 1px solid rgba(255, 255, 255, 1);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
 }

@@ -1003,7 +1003,7 @@ export default function App() {
       const hasNote = !!overrides[key]?.note;
       const hasReminder = overrides[key]?.reminder?.enabled;
 
-      let baseClasses = `mx-auto flex items-center justify-center rounded-full font-medium transition-colors relative cursor-pointer group-hover:opacity-80 ${isLarge ? "w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-sm sm:text-base md:text-lg" : "w-7 h-7 md:w-8 md:h-8 text-[11px] md:text-sm"}`;
+      let baseClasses = `mx-auto flex items-center justify-center rounded-full font-semibold transition-colors relative cursor-pointer group-hover:opacity-80 ${isLarge ? "w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 text-xs xs:text-sm sm:text-base md:text-lg" : "w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 text-[9px] xs:text-[11px] sm:text-sm"}`;
       let stateClasses = "";
 
       if (state === "work") {
@@ -1085,20 +1085,20 @@ export default function App() {
       <div
         id={id}
         key={monthIndex}
-        className={`glass-panel rounded-2xl ${isLarge ? "p-4 sm:p-6 md:p-8" : "p-5"} flex flex-col w-full`}
+        className={`glass-panel rounded-2xl ${isLarge ? "p-3 sm:p-6 md:p-8" : "p-2.5 sm:p-5"} flex flex-col w-full`}
       >
         <h3
-          className={`text-center font-semibold text-slate-800 ${isLarge ? "text-xl md:text-2xl mb-6" : "mb-4"}`}
+          className={`text-center font-bold text-slate-800 ${isLarge ? "text-lg sm:text-2xl mb-3 sm:mb-6" : "text-sm mb-2 sm:mb-4"}`}
         >
           {MONTHS[monthIndex]}
         </h3>
         <div
-          className={`grid grid-cols-7 ${isLarge ? "gap-y-3 gap-x-1 md:gap-y-4 md:gap-x-2" : "gap-y-2 gap-x-1"}`}
+          className={`grid grid-cols-7 ${isLarge ? "gap-y-1.5 sm:gap-y-4 gap-x-0.5 sm:gap-x-2" : "gap-y-1 gap-x-0.5"}`}
         >
           {WEEKDAYS.map((day) => (
             <div
               key={day}
-              className={`text-center font-medium text-slate-400 mb-2 ${isLarge ? "text-xs md:text-sm" : "text-[11px]"}`}
+              className={`text-center font-semibold text-slate-400 mb-1 sm:mb-2 ${isLarge ? "text-[11px] sm:text-sm" : "text-[10px]"}`}
             >
               {day}
             </div>
@@ -1111,8 +1111,8 @@ export default function App() {
 
   if (isLocked) {
     return (
-      <div className="min-h-screen bg-slate-50 font-sans flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100 p-8 text-center animate-in fade-in zoom-in-95 duration-300">
+      <div className="min-h-screen bg-modern-white font-sans flex items-center justify-center p-4">
+        <div className="max-w-md w-full glass-panel rounded-2xl shadow-xl p-8 text-center animate-in fade-in zoom-in-95 duration-300">
           <div className="w-16 h-16 bg-[#10a37f]/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <Lock className="w-8 h-8 text-[#10a37f]" />
           </div>
@@ -1169,19 +1169,19 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-modern-white font-sans pb-12 flex flex-col items-center">
+    <div className="min-h-screen bg-modern-white font-sans pb-4 sm:pb-12 flex flex-col items-center overflow-x-hidden">
       {/* Top Header */}
       <header className="w-full glass-header sticky top-0 z-30">
-        <div className="max-w-[1400px] mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 flex items-center justify-center shrink-0 drop-shadow-sm hover:scale-105 transition-transform cursor-pointer">
-              <FloppyLogo className="w-10 h-10" />
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 sm:h-20 flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="w-9 h-9 sm:w-12 sm:h-12 flex items-center justify-center shrink-0 drop-shadow-sm hover:scale-105 transition-transform cursor-pointer">
+              <FloppyLogo className="w-7 sm:w-10 h-7 sm:h-10" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 leading-tight">
+              <h1 className="text-base sm:text-xl font-bold text-slate-900 leading-none sm:leading-tight">
                 PlanMasterGO
               </h1>
-              <p className="text-sm font-medium text-slate-500">
+              <p className="text-[11px] sm:text-sm font-medium text-slate-500 mt-0.5">
                 {currentTime
                   .toLocaleDateString("fr-FR", {
                     day: "2-digit",
@@ -1192,7 +1192,7 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="flex items-center bg-slate-50 border border-slate-200 shadow-sm rounded-xl px-4 py-2 text-slate-700 font-bold text-lg tracking-tight">
+          <div className="flex items-center bg-slate-50/80 border border-slate-200 shadow-sm rounded-lg sm:rounded-xl px-2.5 py-1 sm:px-4 sm:py-2 text-slate-700 font-bold text-sm sm:text-lg tracking-tight">
             {currentTime.toLocaleTimeString("fr-FR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -1202,18 +1202,18 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="w-full max-w-[1400px] px-3 md:px-6 mt-4 md:mt-8 flex flex-col gap-4 md:gap-6">
+      <main className="w-full max-w-[1400px] px-2 sm:px-6 mt-2.5 sm:mt-6 flex flex-col gap-2.5 sm:gap-6">
         {/* Toolbar */}
-        <div className="glass-panel p-3 md:p-4 rounded-xl md:rounded-2xl flex flex-col lg:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3 md:gap-4 flex-wrap w-full lg:w-auto justify-center lg:justify-start">
-            <div className="flex items-center bg-[#f8fafc] rounded-xl border border-slate-200 p-1 flex-1 sm:flex-none justify-between sm:justify-start">
+        <div className="glass-panel p-2.5 sm:p-4 rounded-xl sm:rounded-2xl flex flex-col lg:flex-row justify-between items-center gap-2.5 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap w-full lg:w-auto justify-center lg:justify-start">
+            <div className="flex items-center bg-[#f8fafc] rounded-xl border border-slate-200 p-0.5 sm:p-1 flex-1 sm:flex-none justify-between sm:justify-start">
               <button
                 onClick={handlePrev}
-                className="p-2 hover:bg-white rounded-lg transition-colors text-slate-600"
+                className="p-1.5 sm:p-2 hover:bg-white rounded-lg transition-colors text-slate-600"
               >
-                <ChevronLeft className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
-              <div className="flex items-center gap-1 px-2 md:px-6 font-bold text-base md:text-lg text-slate-800 tracking-tight min-w-[100px] md:min-w-[120px] justify-center">
+              <div className="flex items-center gap-1 px-1.5 sm:px-6 font-bold text-sm sm:text-lg text-slate-800 tracking-tight min-w-[80px] sm:min-w-[120px] justify-center">
                 {viewMode === "month" && (
                   <select
                     value={viewDate.getMonth()}
@@ -1222,7 +1222,7 @@ export default function App() {
                       newDate.setMonth(Number(e.target.value));
                       setViewDate(newDate);
                     }}
-                    className="bg-transparent appearance-none outline-none cursor-pointer hover:bg-slate-200/50 rounded-md px-1 capitalize text-center"
+                    className="bg-transparent appearance-none outline-none cursor-pointer hover:bg-slate-200/50 rounded-md px-0.5 capitalize text-center"
                   >
                     {MONTHS.map((m, i) => (
                       <option key={i} value={i}>{m}</option>
@@ -1236,7 +1236,7 @@ export default function App() {
                     newDate.setFullYear(Number(e.target.value));
                     setViewDate(newDate);
                   }}
-                  className="bg-transparent appearance-none outline-none cursor-pointer hover:bg-slate-200/50 rounded-md px-1 text-center"
+                  className="bg-transparent appearance-none outline-none cursor-pointer hover:bg-slate-200/50 rounded-md px-0.5 text-center"
                 >
                   {Array.from({ length: 21 }).map((_, i) => {
                     const y = new Date().getFullYear() - 10 + i;
@@ -1246,13 +1246,13 @@ export default function App() {
               </div>
               <button
                 onClick={handleNext}
-                className="p-2 hover:bg-white rounded-lg transition-colors text-slate-600"
+                className="p-1.5 sm:p-2 hover:bg-white rounded-lg transition-colors text-slate-600"
               >
-                <ChevronRight className="w-5 h-5" />
+                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
-            <div className="flex bg-[#f8fafc] p-1 rounded-xl border border-slate-200 hide-scrollbar overflow-x-auto">
+            <div className="flex bg-[#f8fafc] p-0.5 sm:p-1 rounded-xl border border-slate-200 hide-scrollbar overflow-x-auto">
               {(
                 [
                   ["month", "Mois"],
@@ -1262,7 +1262,7 @@ export default function App() {
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap ${viewMode === mode ? "bg-white text-slate-800 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-700"}`}
+                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${viewMode === mode ? "bg-white text-slate-800 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-700"}`}
                 >
                   {label}
                 </button>
@@ -1278,105 +1278,105 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex gap-2 sm:gap-3 w-full lg:w-auto flex-wrap justify-center">
+          <div className="flex gap-1.5 sm:gap-3 w-full lg:w-auto flex-wrap justify-center">
             <button
               onClick={handleToday}
-              className="flex lg:hidden items-center gap-2 px-3 sm:px-4 py-2.5 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-sm"
+              className="flex lg:hidden items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
             >
-              <CalendarIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+              <CalendarIcon className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
               Aujourd'hui
             </button>
             <button
               onClick={handleExportExcel}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-sm"
+              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
             >
-              <FileSpreadsheet className="w-4 h-4" />
+              <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Excel
             </button>
             <button
               onClick={() => setIsPdfModalOpen(true)}
               disabled={isGeneratingPDF}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-xl transition-colors disabled:opacity-70 flex-1 sm:flex-none justify-center whitespace-nowrap text-sm min-w-[100px]"
+              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors disabled:opacity-70 flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm min-w-[75px] sm:min-w-[100px]"
             >
               {isGeneratingPDF ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-[#10a37f]" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#10a37f]" />
                   Création
                 </>
               ) : (
                 <>
-                  <FileText className="w-4 h-4" />
+                  <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   PDF
                 </>
               )}
             </button>
             <button
               onClick={() => setIsShareModalOpen(true)}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-medium rounded-xl transition-all shadow-sm shadow-[#10a37f]/20 active:scale-95 flex-[2] sm:flex-none justify-center whitespace-nowrap text-sm"
+              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-medium rounded-lg sm:rounded-xl transition-all shadow-sm shadow-[#10a37f]/20 active:scale-95 flex-[2] sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
             >
-              <Share2 className="w-4 h-4" />
+              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Partager
             </button>
             {appPin && (
               <button
                 onClick={() => setIsLocked(true)}
-                className="flex items-center justify-center p-2.5 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors shadow-sm active:scale-95"
+                className="flex items-center justify-center p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl transition-colors shadow-sm active:scale-95"
                 title="Verrouiller l'application"
               >
-                <Lock className="w-4 h-4" />
+                <Lock className="w-3.5 h-3.5" />
               </button>
             )}
             <button
               onClick={() => setIsSettingsModalOpen(true)}
-              className="flex items-center justify-center p-2.5 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors shadow-sm active:scale-95"
+              className="flex items-center justify-center p-2 text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg sm:rounded-xl transition-colors shadow-sm active:scale-95"
               title="Paramètres de notification"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* Legend */}
-        <div className="glass-panel flex flex-col gap-4 px-4 md:px-6 py-4 rounded-xl md:rounded-2xl">
-          <div className="flex items-center justify-center gap-6 md:gap-12 flex-wrap">
+        <div className="glass-panel flex flex-col gap-2.5 px-3 sm:px-6 py-3 rounded-xl sm:rounded-2xl">
+          <div className="flex items-center justify-center gap-3 sm:gap-6 flex-wrap">
             <button
               onClick={() => setIsLegendExpanded(!isLegendExpanded)}
-              className="flex items-center gap-2 font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 px-4 md:px-5 py-2 md:py-2.5 rounded-xl transition-colors border border-slate-200 shrink-0 shadow-sm"
+              className="flex items-center gap-1.5 font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl transition-colors border border-slate-200 shrink-0 shadow-sm text-xs sm:text-sm"
             >
               Légende
               <ChevronRight
-                className={`w-4 h-4 transition-transform duration-300 ${isLegendExpanded ? "rotate-90 md:rotate-180" : ""}`}
+                className={`w-3.5 h-3.5 transition-transform duration-300 ${isLegendExpanded ? "rotate-90 md:rotate-180" : ""}`}
               />
             </button>
 
             <button
               onClick={() => setIsRestModalOpen(true)}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2.5 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-medium rounded-xl transition-all shadow-sm shadow-[#10a37f]/20 active:scale-95 shrink-0 justify-center whitespace-nowrap text-sm"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2.5 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-medium rounded-lg sm:rounded-xl transition-all shadow-sm shadow-[#10a37f]/20 active:scale-95 shrink-0 justify-center whitespace-nowrap text-xs sm:text-sm"
             >
-              <Coffee className="w-4 h-4" />
+              <Coffee className="w-3.5 h-3.5" />
               Choix repos
             </button>
           </div>
 
           <div
-            className={`flex flex-wrap items-center justify-center gap-3 md:gap-6 overflow-hidden transition-all duration-500 ease-in-out ${isLegendExpanded ? "max-h-[500px] md:max-h-20 opacity-100 mt-2" : "max-h-0 opacity-0 m-0"}`}
+            className={`flex flex-wrap items-center justify-center gap-2 sm:gap-4 overflow-hidden transition-all duration-500 ease-in-out ${isLegendExpanded ? "max-h-[500px] md:max-h-20 opacity-100 mt-1" : "max-h-0 opacity-0 m-0"}`}
           >
             {LEGEND.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center gap-2 whitespace-nowrap"
+                className="flex items-center gap-1.5 whitespace-nowrap"
               >
                 <div
-                  className={`w-3.5 h-3.5 md:w-4 md:h-4 rounded-full ${item.dotClass}`}
+                  className={`w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 rounded-full ${item.dotClass}`}
                 ></div>
-                <span className="text-xs md:text-sm font-medium text-slate-500">
+                <span className="text-[11px] sm:text-xs font-medium text-slate-500">
                   {item.label}
                 </span>
               </div>
             ))}
           </div>
 
-          <div className="text-center text-xs text-slate-400 w-full mb-1">
+          <div className="text-center text-[10px] sm:text-xs text-slate-400 w-full mb-0.5">
             Astuce : Cliquez sur un jour pour modifier son statut
           </div>
         </div>
