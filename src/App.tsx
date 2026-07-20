@@ -240,7 +240,7 @@ export default function App() {
   const [editNote, setEditNote] = useState<string>("");
   const [editReminderEnabled, setEditReminderEnabled] = useState(false);
   const [editReminderType, setEditReminderType] = useState<"in-app" | "email" | "sms">(
-    "in-app",
+    "email",
   );
   const [editReminderTime, setEditReminderTime] = useState("09:00");
 
@@ -307,7 +307,7 @@ export default function App() {
   }, []);
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [notificationEmail, setNotificationEmail] = useState("");
+  const [notificationEmail, setNotificationEmail] = useState("voicebox155@gmail.com");
   const [notificationPhone, setNotificationPhone] = useState("");
   const [activeSettingsTab, setActiveSettingsTab] = useState<"notifications" | "sync" | "security">("notifications");
   const [importCode, setImportCode] = useState("");
@@ -349,7 +349,7 @@ export default function App() {
 
   useEffect(() => {
     const loadSettings = async () => {
-      const localEmail = localStorage.getItem("planmastergo_email") || localStorage.getItem("webmastergo_email") || localStorage.getItem("planmaster_email") || "";
+      const localEmail = localStorage.getItem("planmastergo_email") || localStorage.getItem("webmastergo_email") || localStorage.getItem("planmaster_email") || "voicebox155@gmail.com";
       const localPhone = localStorage.getItem("planmastergo_phone") || localStorage.getItem("webmastergo_phone") || localStorage.getItem("planmaster_phone") || "";
       const localPin = localStorage.getItem("planmastergo_pin") || "";
       
@@ -966,7 +966,7 @@ export default function App() {
         setEditState(existing?.state || getDayState(date));
         setEditNote(existing?.note || "");
         setEditReminderEnabled(existing?.reminder?.enabled || false);
-        setEditReminderType(existing?.reminder?.type || "in-app");
+        setEditReminderType(existing?.reminder?.type || "email");
         setEditReminderTime(existing?.reminder?.time || "09:00");
       }
       
@@ -1709,7 +1709,7 @@ export default function App() {
         </div>
 
         {/* View Grid */}
-        <div className="w-full">
+        <div className="w-full glass-calendar-wrapper p-3 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm">
           <AnimatePresence mode="wait">
             {viewMode === "annual" ? (
               <motion.div
