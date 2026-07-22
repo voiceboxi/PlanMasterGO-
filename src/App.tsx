@@ -28,6 +28,7 @@ import {
   Unlock,
   Shield,
   Smartphone,
+  Clock,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -83,6 +84,7 @@ type DayState = "work" | "rest" | "rest1" | "training" | "holiday" | "sick" | "n
 interface CustomDayRecord {
   state: DayState;
   note: string;
+  appointmentTime?: string;
   reminder?: {
     enabled: boolean;
     type: "in-app" | "email" | "sms";
@@ -238,6 +240,7 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editState, setEditState] = useState<DayState>("work");
   const [editNote, setEditNote] = useState<string>("");
+  const [editAppointmentTime, setEditAppointmentTime] = useState<string>("");
   const [editReminderEnabled, setEditReminderEnabled] = useState(false);
   const [editReminderType, setEditReminderType] = useState<"in-app" | "email" | "sms">(
     "email",
@@ -848,13 +851,16 @@ export default function App() {
       const stateId = getDayState(d);
       const stateLabel = LEGEND.find((l) => l.id === stateId)?.label || "";
       const key = getDateKey(d);
-      const note = overrides[key]?.note || "";
+      const dayRec = overrides[key];
+      const note = dayRec?.note || "";
+      const appt = dayRec?.appointmentTime;
+      const fullNote = appt ? `[RDV ${appt.replace(":", "h")}] ${note}`.trim() : note;
 
       data.push({
         Date: new Intl.DateTimeFormat("fr-FR").format(d),
         Jour: WEEKDAYS[d.getDay() === 0 ? 6 : d.getDay() - 1],
         Statut: stateLabel,
-        Note: note,
+        Note: fullNote,
       });
     }
 
@@ -965,9 +971,10 @@ export default function App() {
         const existing = overrides[key];
         setEditState(existing?.state || getDayState(date));
         setEditNote(existing?.note || "");
+        setEditAppointmentTime(existing?.appointmentTime || "");
         setEditReminderEnabled(existing?.reminder?.enabled || false);
         setEditReminderType(existing?.reminder?.type || "email");
-        setEditReminderTime(existing?.reminder?.time || "09:00");
+        setEditReminderTime(existing?.reminder?.time || existing?.appointmentTime || "09:00");
       }
       
       return newSelection;
@@ -1065,8 +1072,14 @@ export default function App() {
               ></span>
             )}
           </button>
-          {(hasNote || hasReminder) && !pdfMode && (
+          {(hasNote || hasReminder || overrides[key]?.appointmentTime) && !pdfMode && (
             <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity top-10 z-[60] w-max max-w-[200px] bg-slate-800 text-white text-xs rounded-lg p-3 shadow-lg pointer-events-none flex flex-col gap-1">
+              {overrides[key]?.appointmentTime && (
+                <div className="text-amber-300 font-bold flex items-center gap-1.5">
+                  <Clock className="w-3 h-3 text-amber-400" />
+                  RDV à {overrides[key].appointmentTime.replace(":", "h")}
+                </div>
+              )}
               {hasReminder && (
                 <div className="text-rose-300 font-bold flex items-center gap-1.5">
                   <Bell className="w-3 h-3" />
@@ -1627,9 +1640,11 @@ export default function App() {
                         const stateLabel =
                           LEGEND.find((l) => l.id === stateId)?.label || "";
                         const note = overrides[key]?.note || "";
+                        const apptTime = overrides[key]?.appointmentTime;
 
                         if (
                           note ||
+                          apptTime ||
                           overrides[key]?.reminder?.enabled ||
                           (stateId !== "work" &&
                             stateId !== "rest" &&
@@ -1672,6 +1687,12 @@ export default function App() {
                                       {stateLabel}
                                     </span>
                                   )}
+                                {apptTime && (
+                                  <div className="text-xs font-bold text-amber-900 bg-amber-300 border border-amber-400 px-2 py-0.5 rounded-md w-fit my-1 flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-amber-950" />
+                                    RDV à {apptTime.replace(":", "h")}
+                                  </div>
+                                )}
                                 {note && (
                                   <div className="text-sm font-medium text-slate-600 line-clamp-2">
                                     {note}
@@ -2402,9 +2423,10 @@ export default function App() {
                   const existing = overrides[key];
                   setEditState(existing?.state || getDayState(selectedDates[0]));
                   setEditNote(existing?.note || "");
+                  setEditAppointmentTime(existing?.appointmentTime || "");
                   setEditReminderEnabled(existing?.reminder?.enabled || false);
-                  setEditReminderType(existing?.reminder?.type || "in-app");
-                  setEditReminderTime(existing?.reminder?.time || "09:00");
+                  setEditReminderType(existing?.reminder?.type || "email");
+                  setEditReminderTime(existing?.reminder?.time || existing?.appointmentTime || "09:00");
                 }
                 setIsModalOpen(true);
               }} 
@@ -2479,14 +2501,71 @@ export default function App() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Note (optionnelle)
-                </label>
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                    Note (optionnelle)
+                    {editAppointmentTime && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-amber-300 text-amber-950 border border-amber-400/80 shadow-xs animate-in fade-in duration-200">
+                        <Clock className="w-3.5 h-3.5 text-amber-950" />
+                        {editAppointmentTime.replace(":", "h")}
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-[#10a37f]" />
+                    <span className="text-xs font-semibold text-slate-600 hidden sm:inline">Choix horaire RDV :</span>
+                    <input
+                      type="time"
+                      value={editAppointmentTime}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditAppointmentTime(val);
+                        if (val) {
+                          setEditReminderTime(val);
+                        }
+                      }}
+                      className="border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 bg-amber-50/80 focus:bg-white focus:border-[#10a37f] focus:ring-2 focus:ring-[#10a37f]/20 outline-none shadow-xs transition-all cursor-pointer font-mono"
+                    />
+                    {editAppointmentTime && (
+                      <button
+                        type="button"
+                        onClick={() => setEditAppointmentTime("")}
+                        className="text-slate-400 hover:text-slate-600 text-xs px-1 font-bold"
+                        title="Effacer l'horaire"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Quick time pills */}
+                <div className="flex items-center gap-1.5 mb-2.5 overflow-x-auto pb-1 hide-scrollbar">
+                  <span className="text-[11px] font-medium text-slate-400 shrink-0">Accès rapide :</span>
+                  {["08:00", "10:00", "12:00", "14:00", "18:00", "20:00", "22:00"].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => {
+                        setEditAppointmentTime(t);
+                        setEditReminderTime(t);
+                      }}
+                      className={`px-2.5 py-0.5 rounded-md text-xs font-semibold transition-all shrink-0 ${
+                        editAppointmentTime === t
+                          ? "bg-amber-300 text-amber-950 font-bold shadow-xs border border-amber-400"
+                          : "bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200/60"
+                      }`}
+                    >
+                      {t.replace(":", "h")}
+                    </button>
+                  ))}
+                </div>
+
                 <textarea
                   value={editNote}
                   onChange={(e) => setEditNote(e.target.value)}
-                  placeholder="Ajouter une particularité..."
-                  className="w-full border-slate-200 rounded-xl shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-3 px-4 border min-h-[90px] text-sm resize-none outline-none transition-all placeholder:text-slate-400"
+                  placeholder="Ajouter une particularité ou détails du rdv (ex: RDV médical, réunion...)"
+                  className="w-full border-slate-200 rounded-xl shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-3 px-4 border min-h-[85px] text-sm resize-none outline-none transition-all placeholder:text-slate-400"
                 />
               </div>
 
@@ -2528,7 +2607,7 @@ export default function App() {
                     </div>
                     <div className="flex-1">
                       <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Heure
+                        Heure du rappel
                       </label>
                       <input
                         type="time"
@@ -2559,11 +2638,12 @@ export default function App() {
                       next[getDateKey(date)] = {
                         state: editState,
                         note: editNote,
+                        appointmentTime: editAppointmentTime || undefined,
                         reminder: editReminderEnabled
                           ? {
                               enabled: true,
                               type: editReminderType,
-                              time: editReminderTime,
+                              time: editReminderTime || editAppointmentTime || "09:00",
                             }
                           : undefined,
                       };
