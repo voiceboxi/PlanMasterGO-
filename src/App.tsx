@@ -1191,10 +1191,10 @@ export default function App() {
               <FloppyLogo className="w-7 sm:w-10 h-7 sm:h-10" />
             </div>
             <div>
-              <h1 className="text-base sm:text-xl font-bold text-slate-900 leading-none sm:leading-tight">
+              <h1 className="text-2xl sm:text-3.5xl font-black font-bella text-slate-900 leading-none tracking-tight">
                 PlanMasterGO
               </h1>
-              <p className="text-[11px] sm:text-sm font-medium text-slate-500 mt-0.5">
+              <p className="text-[11px] sm:text-sm font-medium text-slate-500 mt-1">
                 {currentTime
                   .toLocaleDateString("fr-FR", {
                     day: "2-digit",
@@ -1404,7 +1404,7 @@ export default function App() {
             <div className="flex justify-between items-end mb-6 pb-4 border-b-2 border-slate-100">
               <div>
                 <h1 className="text-3xl font-bold text-slate-900 leading-tight">
-                  PlanMasterGO {year}
+                  <span className="font-bella font-black">PlanMasterGO</span> {year}
                 </h1>
                 <p className="text-slate-500 font-medium mt-1">Vue Annuelle</p>
               </div>
@@ -1518,7 +1518,7 @@ export default function App() {
                 <div className="flex justify-between items-end mb-8 pb-6 border-b-2 border-slate-100">
                   <div>
                     <h1 className="text-4xl font-bold text-slate-900 leading-tight">
-                      PlanMasterGO {year}
+                      <span className="font-bella font-black">PlanMasterGO</span> {year}
                     </h1>
                     <p className="text-2xl text-[#10a37f] font-bold mt-2">
                       {monthName}
@@ -1764,7 +1764,9 @@ export default function App() {
         <footer className="text-center text-sm px-6 py-2.5 font-medium text-slate-600 flex flex-col sm:flex-row items-center gap-1 sm:gap-2">
           <div className="flex items-center gap-2">
             <FloppyLogo className="w-5 h-5 opacity-80 hidden sm:block" />
-            <span>© {year} PlanMasterGO | Tous droits réservés | Création par Jimmy |</span>
+            <span>
+              © {year} <span className="font-bella font-black text-slate-900 text-sm sm:text-base px-1 inline-block tracking-tight">PlanMasterGO</span> | Tous droits réservés | Création par <span className="font-signature font-normal text-[#10a37f] text-2xl sm:text-3xl px-1.5 inline-block">Jimmy</span> |
+            </span>
           </div>
           <a
             href="https://freemastergoo.byethost7.com/?i=2"
