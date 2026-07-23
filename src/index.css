@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;0,900;1,400;1,700&family=Unbounded:wght@800;900&family=Syne:wght@800&family=Outfit:wght@800;900&family=League+Spartan:wght@800;900&family=Herr+Von+Muellerhoff&family=Monsieur+La+Doulaise&family=Pinyon+Script&family=Birthstone&family=WindSong:wght@400;500&family=Alex+Brush&family=Dancing+Script:wght@600;700&family=Great+Vibes&family=Sacramento&display=swap');
+@import "tailwindcss";
 
 @font-face {
   font-family: 'Bella';
@@ -25,8 +25,8 @@ html, body {
   width: 100%;
 }
 
-.font-bella {
-  font-family: 'Bella', 'Unbounded', 'Syne', 'Outfit', 'League Spartan', 'Plus Jakarta Sans', sans-serif;
+.font-brand {
+  font-family: 'Outfit', 'Unbounded', 'Syne', 'Plus Jakarta Sans', sans-serif;
   font-weight: 800;
   letter-spacing: -0.025em;
 }
