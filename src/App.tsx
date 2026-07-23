@@ -1051,6 +1051,17 @@ export default function App() {
         stateClasses += " ring-4 ring-[#10a37f] ring-offset-2 ring-offset-white";
       }
 
+      let stateLabel = "";
+      let dotColor = "transparent";
+      if (state === "work") { stateLabel = "Travail"; dotColor = "#fde047"; }
+      else if (state === "rest") { stateLabel = "Repos"; dotColor = "#10a37f"; }
+      else if (state === "rest1") { stateLabel = "Journée Add."; dotColor = "#C7CF00"; }
+      else if (state === "training") { stateLabel = "Formation"; dotColor = "#E1712B"; }
+      else if (state === "holiday") { stateLabel = "Congés"; dotColor = "#A10684"; }
+      else if (state === "sick") { stateLabel = "Maladie"; dotColor = "white"; }
+      else if (state === "6thday") { stateLabel = "6ème Jour"; dotColor = "#34C924"; }
+      else if (state === "children") { stateLabel = "Enfant malade"; dotColor = "#400732"; }
+
       days.push(
         <div
           key={d}
@@ -1072,21 +1083,36 @@ export default function App() {
               ></span>
             )}
           </button>
-          {(hasNote || hasReminder || overrides[key]?.appointmentTime) && !pdfMode && (
-            <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity top-10 z-[60] w-max max-w-[200px] bg-slate-800 text-white text-xs rounded-lg p-3 shadow-lg pointer-events-none flex flex-col gap-1">
+          {!pdfMode && (
+            <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity top-12 z-[60] w-max max-w-[220px] bg-slate-800 text-white text-xs rounded-lg p-3 shadow-lg pointer-events-none flex flex-col gap-1.5 border border-slate-700">
+              <div className="font-bold text-slate-200 border-b border-slate-700 pb-1.5 mb-0.5">
+                {currentDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </div>
+              
+              {stateLabel && (
+                <div className="flex items-center gap-1.5 text-slate-300 font-medium">
+                  <span className="w-2.5 h-2.5 rounded-full border border-slate-600 shadow-sm" style={{ backgroundColor: dotColor }}></span>
+                  {stateLabel}
+                </div>
+              )}
+
               {overrides[key]?.appointmentTime && (
                 <div className="text-amber-300 font-bold flex items-center gap-1.5">
-                  <Clock className="w-3 h-3 text-amber-400" />
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
                   RDV à {overrides[key].appointmentTime.replace(":", "h")}
                 </div>
               )}
               {hasReminder && (
                 <div className="text-rose-300 font-bold flex items-center gap-1.5">
-                  <Bell className="w-3 h-3" />
+                  <Bell className="w-3.5 h-3.5" />
                   Rappel: {overrides[key]?.reminder?.time}
                 </div>
               )}
-              {hasNote && <div>{overrides[key]?.note}</div>}
+              {hasNote && (
+                <div className="mt-0.5 text-slate-300 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                  {overrides[key]?.note}
+                </div>
+              )}
             </div>
           )}
         </div>,
@@ -1191,7 +1217,7 @@ export default function App() {
               <FloppyLogo className="w-7 sm:w-10 h-7 sm:h-10" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-4xl font-black font-brand text-slate-900 leading-none tracking-tight">
+              <h1 className="text-xl sm:text-3xl font-black font-roboto text-slate-900 leading-none tracking-tight">
                 PlanMasterGO
               </h1>
               <p className="text-[11px] sm:text-sm font-medium text-slate-500 mt-1">
@@ -1404,7 +1430,7 @@ export default function App() {
             <div className="flex justify-between items-end mb-6 pb-4 border-b-2 border-slate-100">
               <div>
                 <h1 className="text-3xl font-bold text-slate-900 leading-tight">
-                  <span className="font-brand font-black">PlanMasterGO</span> {year}
+                  <span className="font-roboto font-black">PlanMasterGO</span> {year}
                 </h1>
                 <p className="text-slate-500 font-medium mt-1">Vue Annuelle</p>
               </div>
@@ -1518,7 +1544,7 @@ export default function App() {
                 <div className="flex justify-between items-end mb-8 pb-6 border-b-2 border-slate-100">
                   <div>
                     <h1 className="text-4xl font-bold text-slate-900 leading-tight">
-                      <span className="font-brand font-black">PlanMasterGO</span> {year}
+                      <span className="font-roboto font-black">PlanMasterGO</span> {year}
                     </h1>
                     <p className="text-2xl text-[#10a37f] font-bold mt-2">
                       {monthName}
@@ -1765,7 +1791,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <FloppyLogo className="w-5 h-5 opacity-80 hidden sm:block" />
             <span>
-              © {year} <span className="font-brand font-black text-slate-900 text-sm sm:text-base px-1 inline-block tracking-tight">PlanMasterGO</span> | Tous droits réservés | Création par <span className="font-signature font-normal text-[#10a37f] text-2xl sm:text-3xl px-1.5 inline-block">Jimmy</span> |
+              © {year} <span className="font-roboto font-black text-slate-900 text-xs sm:text-sm px-1 inline-block tracking-tight">PlanMasterGO</span> | Tous droits réservés | Création par <span className="font-signature font-normal text-[#10a37f] text-xl sm:text-2xl px-1.5 inline-block">Jimmy</span> |
             </span>
           </div>
           <a
