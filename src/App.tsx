@@ -1217,7 +1217,7 @@ export default function App() {
               <FloppyLogo className="w-7 sm:w-10 h-7 sm:h-10" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-3xl font-black font-roboto text-slate-900 leading-none tracking-tight">
+              <h1 className="text-[15px] font-bold font-handwritten text-slate-900 leading-none tracking-wide">
                 PlanMasterGO
               </h1>
               <p className="text-[11px] sm:text-sm font-medium text-slate-500 mt-1">
@@ -1430,7 +1430,7 @@ export default function App() {
             <div className="flex justify-between items-end mb-6 pb-4 border-b-2 border-slate-100">
               <div>
                 <h1 className="text-3xl font-bold text-slate-900 leading-tight">
-                  <span className="font-roboto font-black">PlanMasterGO</span> {year}
+                  <span className="font-handwritten font-bold text-3xl sm:text-4xl">PlanMasterGO</span> {year}
                 </h1>
                 <p className="text-slate-500 font-medium mt-1">Vue Annuelle</p>
               </div>
@@ -1544,7 +1544,7 @@ export default function App() {
                 <div className="flex justify-between items-end mb-8 pb-6 border-b-2 border-slate-100">
                   <div>
                     <h1 className="text-4xl font-bold text-slate-900 leading-tight">
-                      <span className="font-roboto font-black">PlanMasterGO</span> {year}
+                      <span className="font-handwritten font-bold text-4xl sm:text-5xl">PlanMasterGO</span> {year}
                     </h1>
                     <p className="text-2xl text-[#10a37f] font-bold mt-2">
                       {monthName}
@@ -1788,10 +1788,10 @@ export default function App() {
       {/* Footer */}
       <div className="mt-16 mb-8 px-4 flex justify-center w-full z-10">
         <footer className="text-center text-sm px-6 py-2.5 font-medium text-slate-600 flex flex-col sm:flex-row items-center gap-1 sm:gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <FloppyLogo className="w-5 h-5 opacity-80 hidden sm:block" />
             <span>
-              © {year} <span className="font-roboto font-black text-slate-900 text-xs sm:text-sm px-1 inline-block tracking-tight">PlanMasterGO</span> | Tous droits réservés | Création par <span className="font-signature font-normal text-[#10a37f] text-xl sm:text-2xl px-1.5 inline-block">Jimmy</span> |
+              © {year} <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">PlanMasterGO</span> | Tous droits réservés | Création par <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">Jimmy</span> |
             </span>
           </div>
           <a
@@ -1800,7 +1800,7 @@ export default function App() {
             rel="noopener noreferrer"
             className="text-[#10a37f] hover:text-[#0b7a5e] transition-colors underline whitespace-nowrap font-semibold"
           >
-           WebmasterGO
+            WebmasterGO
           </a>
           <FloppyLogo className="w-5 h-5 opacity-80 sm:hidden mt-1" />
         </footer>
