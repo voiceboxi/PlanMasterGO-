@@ -29,6 +29,8 @@ import {
   Shield,
   Smartphone,
   Clock,
+  Calendar,
+  Eye,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -254,11 +256,17 @@ export default function App() {
   // PDF State
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
-  const [pdfViewType, setPdfViewType] = useState<"condensed" | "detailed">(
+  const [pdfViewType, setPdfViewType] = useState<"condensed" | "detailed" | "custom">(
     "condensed",
   );
   const [pdfSelectedMonth, setPdfSelectedMonth] = useState<number>(
     new Date().getMonth(),
+  );
+  const [pdfCustomStartDate, setPdfCustomStartDate] = useState<string>(
+    `${new Date().getFullYear()}-01-01`
+  );
+  const [pdfCustomEndDate, setPdfCustomEndDate] = useState<string>(
+    `${new Date().getFullYear()}-12-31`
   );
 
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
@@ -312,10 +320,24 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState("voicebox155@gmail.com");
   const [notificationPhone, setNotificationPhone] = useState("");
-  const [activeSettingsTab, setActiveSettingsTab] = useState<"notifications" | "sync" | "security">("notifications");
+  const [activeSettingsTab, setActiveSettingsTab] = useState<"notifications" | "sync" | "security" | "display">("notifications");
+  const [showFrenchHolidays, setShowFrenchHolidays] = useState(false);
+  const [frenchHolidays, setFrenchHolidays] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (showFrenchHolidays) {
+      fetch("https://calendrier.api.gouv.fr/jours-feries/metropole.json")
+        .then(r => r.json())
+        .then(data => setFrenchHolidays(data))
+        .catch(e => console.error("Error fetching holidays:", e));
+    } else {
+      setFrenchHolidays({});
+    }
+  }, [showFrenchHolidays]);
   const [importCode, setImportCode] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
   
   const [appPin, setAppPin] = useState<string>("");
@@ -355,10 +377,12 @@ export default function App() {
       const localEmail = localStorage.getItem("planmastergo_email") || localStorage.getItem("webmastergo_email") || localStorage.getItem("planmaster_email") || "voicebox155@gmail.com";
       const localPhone = localStorage.getItem("planmastergo_phone") || localStorage.getItem("webmastergo_phone") || localStorage.getItem("planmaster_phone") || "";
       const localPin = localStorage.getItem("planmastergo_pin") || "";
+      const localShowHolidays = localStorage.getItem("planmastergo_show_holidays") === "true";
       
       setNotificationEmail(localEmail);
       setNotificationPhone(localPhone);
       setAppPin(localPin);
+      setShowFrenchHolidays(localShowHolidays);
       
       if (localPin) {
         setIsLocked(true);
@@ -404,6 +428,10 @@ export default function App() {
             if (data.restChoices) {
               setRestChoices(data.restChoices);
               localStorage.setItem("planmastergo_rest_choices", JSON.stringify(data.restChoices));
+            }
+            if (data.showFrenchHolidays !== undefined) {
+              setShowFrenchHolidays(data.showFrenchHolidays);
+              localStorage.setItem("planmastergo_show_holidays", JSON.stringify(data.showFrenchHolidays));
             }
           }
 
@@ -509,6 +537,7 @@ export default function App() {
         pin: appPin,
         overrides: overrides,
         restChoices: restChoices,
+        showFrenchHolidays: showFrenchHolidays,
         updatedAt: backupTime,
       });
       setLastBackupTime(new Date(backupTime).toLocaleString("fr-FR"));
@@ -541,6 +570,7 @@ export default function App() {
         pin: appPin,
         overrides: overrides,
         restChoices: restChoices,
+        showFrenchHolidays: showFrenchHolidays,
         updatedAt: backupTime,
       });
       setLastBackupTime(new Date(backupTime).toLocaleString("fr-FR"));
@@ -602,12 +632,14 @@ export default function App() {
         if (data.phone) setNotificationPhone(data.phone);
         if (data.overrides) setOverrides(data.overrides);
         if (data.restChoices) setRestChoices(data.restChoices);
+        if (data.showFrenchHolidays !== undefined) setShowFrenchHolidays(data.showFrenchHolidays);
         
         localStorage.setItem("planmastergo_device_id", trimmedCode);
         if (data.email) localStorage.setItem("planmastergo_email", data.email);
         if (data.phone) localStorage.setItem("planmastergo_phone", data.phone);
         if (data.overrides) localStorage.setItem("planmastergo_overrides", JSON.stringify(data.overrides));
         if (data.restChoices) localStorage.setItem("planmastergo_rest_choices", JSON.stringify(data.restChoices));
+        if (data.showFrenchHolidays !== undefined) localStorage.setItem("planmastergo_show_holidays", JSON.stringify(data.showFrenchHolidays));
         
         setDeviceId(trimmedCode);
         
@@ -646,6 +678,7 @@ export default function App() {
     if (!deviceId || !isSettingsLoaded) return;
     
     const saveToCloud = async () => {
+      setIsAutoSaving(true);
       try {
         await setDoc(doc(db, "user_settings", deviceId), {
           deviceId: deviceId,
@@ -654,16 +687,19 @@ export default function App() {
           pin: appPin,
           overrides: overrides,
           restChoices: restChoices,
+          showFrenchHolidays: showFrenchHolidays,
           updatedAt: new Date().toISOString(),
         });
         setLastBackupTime(new Date().toLocaleString("fr-FR"));
       } catch (e) {
         console.error("Auto backup error:", e);
+      } finally {
+        setTimeout(() => setIsAutoSaving(false), 1000);
       }
     };
     
     saveToCloud();
-  }, [overrides, restChoices, notificationEmail, notificationPhone, appPin, deviceId, isSettingsLoaded]);
+  }, [overrides, restChoices, notificationEmail, notificationPhone, appPin, showFrenchHolidays, deviceId, isSettingsLoaded]);
 
   useEffect(() => {
     const key = getDateKey(currentTime);
@@ -895,6 +931,39 @@ export default function App() {
           const pdfHeight = (imgProps.height * docWidth) / imgProps.width;
           pdf.addImage(imgData, "PNG", 0, 0, docWidth, pdfHeight);
         }
+      } else if (typeToRender === "custom") {
+        pdf = new jsPDF("p", "mm", "a4");
+        const docWidth = pdf.internal.pageSize.getWidth();
+        const start = new Date(pdfCustomStartDate);
+        const end = new Date(pdfCustomEndDate);
+        const startMonth = start.getMonth();
+        const endMonth = end.getMonth();
+        const startYear = start.getFullYear();
+        const endYear = end.getFullYear();
+        
+        let hasAddedPage = false;
+
+        // Note: For simplicity and assuming current year mostly, we will render months 
+        // that fall in the range for the current calendar year.
+        const effectiveStartMonth = startYear < year ? 0 : (startYear > year ? 12 : startMonth);
+        const effectiveEndMonth = endYear > year ? 11 : (endYear < year ? -1 : endMonth);
+
+        for (let m = effectiveStartMonth; m <= effectiveEndMonth; m++) {
+          const element = document.getElementById(`pdf-detailed-page-${m}`);
+          if (element) {
+            if (hasAddedPage) {
+              pdf.addPage();
+            }
+            const imgData = await toPng(element, {
+              pixelRatio: 2,
+              backgroundColor: "#ffffff",
+            });
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfHeight = (imgProps.height * docWidth) / imgProps.width;
+            pdf.addImage(imgData, "PNG", 0, 0, docWidth, pdfHeight);
+            hasAddedPage = true;
+          }
+        }
       } else {
         pdf = new jsPDF("p", "mm", "a4");
         const docWidth = pdf.internal.pageSize.getWidth();
@@ -909,7 +978,6 @@ export default function App() {
           });
           const imgProps = pdf.getImageProperties(imgData);
           const pdfHeight = (imgProps.height * docWidth) / imgProps.width;
-
           pdf.addImage(imgData, "PNG", 0, 0, docWidth, pdfHeight);
         }
       }
@@ -922,6 +990,8 @@ export default function App() {
         const filename =
           typeToRender === "condensed"
             ? `PlanMasterGO-${year}-Condense.pdf`
+            : typeToRender === "custom"
+            ? `PlanMasterGO-${year}-Personnalise.pdf`
             : `PlanMasterGO-${year}-${MONTHS[pdfSelectedMonth]}.pdf`;
         pdf.save(filename);
       }
@@ -995,8 +1065,8 @@ export default function App() {
 
     const days = [];
     const emptyCellClass = isLarge
-      ? "mx-auto w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12"
-      : "mx-auto w-7 h-7 md:w-8 md:h-8";
+      ? "mx-auto w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12"
+      : "mx-auto w-7 h-7 sm:w-8 sm:h-8";
 
     for (let i = 0; i < startDayOfWeek; i++) {
       days.push(<div key={`empty-${i}`} className={emptyCellClass}></div>);
@@ -1009,8 +1079,9 @@ export default function App() {
       const key = getDateKey(currentDate);
       const hasNote = !!overrides[key]?.note;
       const hasReminder = overrides[key]?.reminder?.enabled;
+      const holidayName = showFrenchHolidays ? frenchHolidays[key] : null;
 
-      let baseClasses = `mx-auto flex items-center justify-center rounded-full font-semibold transition-colors relative cursor-pointer group-hover:opacity-80 ${isLarge ? "w-8 h-8 xs:w-9 xs:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 text-xs xs:text-sm sm:text-base md:text-lg" : "w-6 h-6 xs:w-7 xs:h-7 sm:w-8 sm:h-8 text-[9px] xs:text-[11px] sm:text-sm"}`;
+      let baseClasses = `mx-auto flex items-center justify-center rounded-full font-semibold transition-colors relative cursor-pointer group-hover:opacity-80 ${isLarge ? "w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 text-sm sm:text-base md:text-lg" : "w-7 h-7 sm:w-8 sm:h-8 text-xs sm:text-sm"}`;
       let stateClasses = "";
 
       if (state === "work") {
@@ -1083,6 +1154,11 @@ export default function App() {
               ></span>
             )}
           </button>
+          {holidayName && !pdfMode && isLarge && (
+            <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 text-[9px] sm:text-[10px] md:text-[11px] text-pink-600 font-bold whitespace-nowrap truncate max-w-[40px] sm:max-w-[48px] md:max-w-[56px] pointer-events-none drop-shadow-[0_1px_1px_rgba(255,255,255,1)]">
+              {holidayName}
+            </div>
+          )}
           {!pdfMode && (
             <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity top-12 z-[60] w-max max-w-[220px] bg-slate-800 text-white text-xs rounded-lg p-3 shadow-lg pointer-events-none flex flex-col gap-1.5 border border-slate-700">
               <div className="font-bold text-slate-200 border-b border-slate-700 pb-1.5 mb-0.5">
@@ -1093,6 +1169,12 @@ export default function App() {
                 <div className="flex items-center gap-1.5 text-slate-300 font-medium">
                   <span className="w-2.5 h-2.5 rounded-full border border-slate-600 shadow-sm" style={{ backgroundColor: dotColor }}></span>
                   {stateLabel}
+                </div>
+              )}
+
+              {holidayName && (
+                <div className="text-pink-300 font-bold flex items-center gap-1.5">
+                  🎉 {holidayName}
                 </div>
               )}
 
@@ -1124,7 +1206,7 @@ export default function App() {
       <div
         id={id}
         key={monthIndex}
-        className={`glass-panel rounded-2xl ${isLarge ? "p-3 sm:p-6 md:p-8" : "p-2.5 sm:p-5"} flex flex-col w-full`}
+        className={`glass-panel rounded-2xl ${isLarge ? "p-2 min-[360px]:p-3 sm:p-6 md:p-8" : "p-2 min-[360px]:p-2.5 sm:p-5"} flex flex-col w-full`}
       >
         <h3
           className={`text-center font-bold text-slate-800 ${isLarge ? "text-lg sm:text-2xl mb-3 sm:mb-6" : "text-sm mb-2 sm:mb-4"}`}
@@ -1137,7 +1219,7 @@ export default function App() {
           {WEEKDAYS.map((day) => (
             <div
               key={day}
-              className={`text-center font-semibold text-slate-400 mb-1 sm:mb-2 ${isLarge ? "text-[11px] sm:text-sm" : "text-[10px]"}`}
+              className={`text-center font-semibold text-slate-400 mb-1 sm:mb-2 ${isLarge ? "text-xs sm:text-sm" : "text-[11px] sm:text-[12px]"}`}
             >
               {day}
             </div>
@@ -1209,6 +1291,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-modern-white font-sans pb-4 sm:pb-12 flex flex-col items-center overflow-x-hidden">
+      {/* Auto Save Progress Bar */}
+      <div className={`fixed top-0 left-0 right-0 z-[100] h-1 bg-emerald-50 transition-opacity duration-300 ${isAutoSaving ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className="h-full bg-[#10a37f] shadow-[0_0_8px_#10a37f] animate-[pulse_1s_ease-in-out_infinite] w-full"></div>
+      </div>
+      
       {/* Top Header */}
       <header className="w-full glass-header sticky top-0 z-30">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-14 sm:h-20 flex items-center justify-between">
@@ -1421,7 +1508,7 @@ export default function App() {
         </div>
 
         {/* Hidden Container for PDF export of Full Year */}
-        <div className="absolute top-[-9999px] left-[-9999px] overflow-hidden -z-50 pointer-events-none">
+        <div className="fixed top-0 left-0 opacity-0 -z-50 pointer-events-none w-0 h-0 overflow-hidden">
           {/* Condensed View : 1 A4 Page */}
           <div
             id="pdf-condensed-page"
@@ -1748,7 +1835,7 @@ export default function App() {
                 </div>
 
                 <div className="mt-6 text-center text-xs font-semibold text-slate-400">
-                  © {year} PlanMasterGO - Tous droits réservés
+                  © {year} PlanMasterGO
                 </div>
               </div>
             ))}
@@ -1756,7 +1843,7 @@ export default function App() {
         </div>
 
         {/* View Grid */}
-        <div className="w-full glass-calendar-wrapper p-3 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm">
+        <div className="w-full glass-calendar-wrapper p-2 min-[360px]:p-3 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm">
           <AnimatePresence mode="wait">
             {viewMode === "annual" ? (
               <motion.div
@@ -1791,7 +1878,7 @@ export default function App() {
           <div className="flex items-center gap-1.5">
             <FloppyLogo className="w-5 h-5 opacity-80 hidden sm:block" />
             <span>
-              © {year} <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">PlanMasterGO</span> | Tous droits réservés | Création par <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">Jimmy</span> |
+              © {year} <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">PlanMasterGO</span> | Créé par <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">Jimmy</span> |
             </span>
           </div>
           <a
@@ -1933,6 +2020,51 @@ export default function App() {
                         </option>
                       ))}
                     </select>
+                  </div>
+                )}
+              </div>
+              
+              <div
+                onClick={() => setPdfViewType("custom")}
+                className={`cursor-pointer p-4 rounded-xl border-2 transition-all flex flex-col gap-3 ${pdfViewType === "custom" ? "border-[#10a37f] bg-[#10a37f]/5" : "border-slate-100 hover:border-slate-200"}`}
+              >
+                <div className="flex items-start gap-4">
+                  <div
+                    className={`p-2 rounded-lg ${pdfViewType === "custom" ? "bg-[#10a37f] text-white" : "bg-slate-100 text-slate-500"}`}
+                  >
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-slate-800 text-sm">
+                      Plage personnalisée
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Choisir une date de début et de fin (par mois).
+                    </p>
+                  </div>
+                </div>
+                {pdfViewType === "custom" && (
+                  <div className="pl-[52px] flex flex-col gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Date de début</label>
+                      <input
+                        type="date"
+                        value={pdfCustomStartDate}
+                        onChange={(e) => setPdfCustomStartDate(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-1.5 px-3 border text-sm outline-none transition-all bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Date de fin</label>
+                      <input
+                        type="date"
+                        value={pdfCustomEndDate}
+                        onChange={(e) => setPdfCustomEndDate(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-1.5 px-3 border text-sm outline-none transition-all bg-white"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -2209,6 +2341,17 @@ export default function App() {
                 <Shield className="w-4 h-4" />
                 <span className="hidden sm:inline">Sécurité</span>
               </button>
+              <button
+                onClick={() => setActiveSettingsTab("display")}
+                className={`flex-1 py-3 text-center text-[11px] sm:text-sm font-semibold transition-all border-b-2 flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-2 ${
+                  activeSettingsTab === "display"
+                    ? "border-[#10a37f] text-[#10a37f]"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <Eye className="w-4 h-4" />
+                <span className="hidden sm:inline">Affichage</span>
+              </button>
             </div>
 
             <div className="p-6">
@@ -2363,6 +2506,28 @@ export default function App() {
                         </button>
                       )}
                     </div>
+                  </div>
+                </div>
+              ) : activeSettingsTab === "display" ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-3">
+                    <h4 className="font-semibold text-slate-700 text-sm flex items-center gap-1.5 mb-2">
+                      <Calendar className="w-4 h-4 text-[#10a37f]" />
+                      Calendrier
+                    </h4>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <div className="relative inline-block w-10 h-5 transition duration-200 ease-in-out rounded-full cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="absolute w-0 h-0 opacity-0"
+                          checked={showFrenchHolidays}
+                          onChange={(e) => setShowFrenchHolidays(e.target.checked)}
+                        />
+                        <span className={`absolute inset-0 transition-colors duration-200 ease-in-out rounded-full ${showFrenchHolidays ? 'bg-[#10a37f]' : 'bg-slate-300'}`}></span>
+                        <span className={`absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full transition-transform duration-200 ease-in-out ${showFrenchHolidays ? 'translate-x-5' : 'translate-x-0'} shadow-sm`}></span>
+                      </div>
+                      <span className="text-sm font-medium text-slate-700">Afficher automatiquement les jours fériés français</span>
+                    </label>
                   </div>
                 </div>
               ) : null}
