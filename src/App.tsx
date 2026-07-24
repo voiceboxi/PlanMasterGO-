@@ -1138,9 +1138,13 @@ export default function App() {
           key={d}
           className="flex justify-center items-center relative group"
         >
-          <button
+          <motion.button
             onClick={() => handleDayClick(currentDate)}
             className={`${baseClasses} ${stateClasses}`}
+            animate={{ scale: isSelectedMulti && !pdfMode ? 1.15 : 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
             {d}
             {hasNote && (
@@ -1153,7 +1157,7 @@ export default function App() {
                 className={`absolute bg-rose-500 rounded-full border-2 border-white ${isLarge ? "-bottom-0 -right-1 w-3 h-3" : "-bottom-0.5 -right-0.5 w-2.5 h-2.5"}`}
               ></span>
             )}
-          </button>
+          </motion.button>
           {holidayName && !pdfMode && isLarge && (
             <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 text-[9px] sm:text-[10px] md:text-[11px] text-pink-600 font-bold whitespace-nowrap truncate max-w-[40px] sm:max-w-[48px] md:max-w-[56px] pointer-events-none drop-shadow-[0_1px_1px_rgba(255,255,255,1)]">
               {holidayName}
@@ -1875,8 +1879,8 @@ export default function App() {
       {/* Footer */}
       <div className="mt-16 mb-8 px-4 flex justify-center w-full z-10">
         <footer className="text-center text-sm px-6 py-2.5 font-medium text-slate-600 flex flex-col sm:flex-row items-center gap-1 sm:gap-2">
-          <div className="flex items-center gap-1.5">
-            <FloppyLogo className="w-5 h-5 opacity-80 hidden sm:block" />
+          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+            <FloppyLogo className="w-5 h-5 opacity-80" />
             <span>
               © {year} <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">PlanMasterGO</span> | Créé par <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">Jimmy</span> |
             </span>
@@ -1889,7 +1893,6 @@ export default function App() {
           >
             WebmasterGO
           </a>
-          <FloppyLogo className="w-5 h-5 opacity-80 sm:hidden mt-1" />
         </footer>
       </div>
 
