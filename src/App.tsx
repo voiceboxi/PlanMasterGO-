@@ -39,6 +39,15 @@ import {
   Trash2,
   Filter,
   Plane,
+  Globe,
+  Server,
+  Terminal,
+  ExternalLink,
+  Code2,
+  User,
+  ShieldCheck,
+  EyeOff,
+  LogOut,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -362,12 +371,77 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("saved");
   const [syncError, setSyncError] = useState<string | null>(null);
   const [isSyncPopoverOpen, setIsSyncPopoverOpen] = useState(false);
+
+  const [isExportGuideOpen, setIsExportGuideOpen] = useState(false);
+  const [activeExportTab, setActiveExportTab] = useState<"export" | "ios" | "android" | "hosting" | "pwa">("export");
   
   const [appPin, setAppPin] = useState<string>("");
   const [isLocked, setIsLocked] = useState(false);
   const [unlockPinInput, setUnlockPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
   const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
+
+  // Admin Authentication State
+  const ADMIN_USER = "AdminRoot#0";
+  const ADMIN_PASS = "007#ACP3yruN.";
+
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return localStorage.getItem("planmastergo_is_admin") === "true";
+  });
+  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
+  const [adminUsernameInput, setAdminUsernameInput] = useState("");
+  const [adminPasswordInput, setAdminPasswordInput] = useState("");
+  const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [adminModalNotice, setAdminModalNotice] = useState<string | null>(null);
+
+  const requireAdmin = (notice?: string): boolean => {
+    if (isAdmin) return true;
+    setAdminModalNotice(
+      notice || "Connexion Administrateur (AdminRoot#0) requise pour effectuer cette action."
+    );
+    setAdminLoginError(null);
+    setIsAdminLoginModalOpen(true);
+    return false;
+  };
+
+  const handleAdminLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (adminUsernameInput.trim() === ADMIN_USER && adminPasswordInput === ADMIN_PASS) {
+      setIsAdmin(true);
+      localStorage.setItem("planmastergo_is_admin", "true");
+      setAdminLoginError(null);
+      setIsAdminLoginModalOpen(false);
+      setAdminUsernameInput("");
+      setAdminPasswordInput("");
+      setAdminModalNotice(null);
+      setActiveToast({
+        id: "admin-auth-success",
+        title: "Mode Administrateur Activé",
+        subtitle: "Authentification réussie (AdminRoot#0). Vous disposez des droits de modification, d'exportation et de sauvegarde.",
+        type: "in-app",
+      });
+      setTimeout(() => {
+        setActiveToast((current) => (current?.id === "admin-auth-success" ? null : current));
+      }, 4000);
+    } else {
+      setAdminLoginError("Identifiant ou mot de passe administrateur incorrect.");
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdmin(false);
+    localStorage.removeItem("planmastergo_is_admin");
+    setActiveToast({
+      id: "admin-auth-logout",
+      title: "Déconnexion Administrateur",
+      subtitle: "Vous êtes désormais en mode consultation.",
+      type: "in-app",
+    });
+    setTimeout(() => {
+      setActiveToast((current) => (current?.id === "admin-auth-logout" ? null : current));
+    }, 3000);
+  };
 
   const [deviceId, setDeviceId] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -551,6 +625,9 @@ export default function App() {
   };
 
   const handleSaveSettings = async () => {
+    if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour enregistrer les paramètres.")) {
+      return;
+    }
     localStorage.setItem("planmastergo_email", notificationEmail);
     localStorage.setItem("planmastergo_phone", notificationPhone);
     localStorage.setItem("planmastergo_pin", appPin);
@@ -594,6 +671,9 @@ export default function App() {
   };
 
   const handleForceBackup = async () => {
+    if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour forcer la sauvegarde Cloud.")) {
+      return;
+    }
     setIsBackingUp(true);
     setSyncStatus("pending");
     setSyncError(null);
@@ -633,6 +713,9 @@ export default function App() {
   };
 
   const handleImportSync = async (codeToImport: string) => {
+    if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour importer un profil/planning.")) {
+      return;
+    }
     const trimmedCode = codeToImport.trim();
     if (!trimmedCode) {
       alert("Veuillez saisir un code de synchronisation valide.");
@@ -1363,11 +1446,26 @@ export default function App() {
       <div
         id={id}
         key={monthIndex}
-        className={`glass-panel rounded-2xl ${isLarge ? "p-2 min-[360px]:p-3 sm:p-6 md:p-8" : "p-2 min-[360px]:p-2.5 sm:p-5"} flex flex-col justify-between w-full`}
+        onClick={() => {
+          if (!isLarge) {
+            setViewDate(new Date(year, monthIndex, 1));
+            setViewMode("month");
+          }
+        }}
+        className={`glass-panel rounded-2xl ${
+          isLarge
+            ? "p-2 min-[360px]:p-3 sm:p-6 md:p-8"
+            : "p-2 min-[360px]:p-2.5 sm:p-5 hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group hover:scale-[1.01]"
+        } flex flex-col justify-between w-full`}
+        title={!isLarge ? `Cliquer pour basculer sur la vue détaillée du mois de ${MONTHS[monthIndex]}` : undefined}
       >
         <div>
           <h3
-            className={`text-center font-bold text-slate-800 ${isLarge ? "text-lg sm:text-2xl mb-3 sm:mb-6" : "text-sm mb-2 sm:mb-4"}`}
+            className={`text-center font-bold text-slate-800 ${
+              isLarge
+                ? "text-lg sm:text-2xl mb-3 sm:mb-6"
+                : "text-sm mb-2 sm:mb-4 group-hover:text-[#10a37f] transition-colors"
+            }`}
           >
             {MONTHS[monthIndex]}
           </h3>
@@ -1589,7 +1687,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex bg-[#f8fafc] p-0.5 sm:p-1 rounded-xl border border-slate-200 hide-scrollbar overflow-x-auto">
+            <div className="flex bg-[#f8fafc] p-0.5 sm:p-1 rounded-xl border border-slate-200 hide-scrollbar overflow-x-auto relative">
               {(
                 [
                   ["month", "Mois"],
@@ -1599,8 +1697,17 @@ export default function App() {
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
-                  className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${viewMode === mode ? "bg-white text-slate-800 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-700"}`}
+                  className={`relative px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap z-10 ${
+                    viewMode === mode ? "text-slate-900" : "text-slate-500 hover:text-slate-800"
+                  }`}
                 >
+                  {viewMode === mode && (
+                    <motion.div
+                      layoutId="activeViewTab"
+                      className="absolute inset-0 bg-white rounded-lg shadow-sm border border-slate-200/80 -z-10"
+                      transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                    />
+                  )}
                   {label}
                 </button>
               ))}
@@ -1658,6 +1765,16 @@ export default function App() {
                 </>
               )}
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => setIsExportGuideOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 bg-[#1e293b] hover:bg-[#0f172a] text-white font-medium rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-95 flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
+                title="Exporter le projet & Implémenter sous iOS, Android ou Hébergeur Web"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-sky-400" />
+                <span>Export / Mobile</span>
+              </button>
+            )}
             <button
               onClick={() => setIsShareModalOpen(true)}
               className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-medium rounded-lg sm:rounded-xl transition-all shadow-sm shadow-[#10a37f]/20 active:scale-95 flex-[2] sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
@@ -1665,6 +1782,34 @@ export default function App() {
               <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               Partager
             </button>
+
+            {/* Admin Authentication & Status Pill */}
+            {isAdmin ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold shadow-xs shrink-0">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Admin</span>
+                <button
+                  onClick={handleAdminLogout}
+                  className="ml-1 p-1 hover:bg-emerald-200/80 rounded-md transition-colors text-emerald-700 hover:text-emerald-950"
+                  title="Se déconnecter de l'administration"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setAdminModalNotice(null);
+                  setAdminLoginError(null);
+                  setIsAdminLoginModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 font-semibold rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-95 text-xs sm:text-sm shrink-0 border border-slate-700"
+                title="Connexion Administrateur (AdminRoot#0)"
+              >
+                <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
+                <span>Admin</span>
+              </button>
+            )}
             {appPin && (
               <button
                 onClick={() => setIsLocked(true)}
@@ -1793,16 +1938,29 @@ export default function App() {
                         <span className="text-[11px] text-slate-400 truncate max-w-[140px]" title={deviceId}>
                           ID: {deviceId.substring(0, 10)}...
                         </span>
-                        <button
-                          onClick={() => {
-                            handleForceBackup();
-                          }}
-                          disabled={isBackingUp || syncStatus === "pending"}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-medium rounded-lg text-xs transition-all shadow-sm shrink-0"
-                        >
-                          <RefreshCw className={`w-3 h-3 ${isBackingUp || syncStatus === "pending" ? "animate-spin" : ""}`} />
-                          Forcer la synchro
-                        </button>
+                        {isAdmin ? (
+                          <button
+                            onClick={() => {
+                              handleForceBackup();
+                            }}
+                            disabled={isBackingUp || syncStatus === "pending"}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-medium rounded-lg text-xs transition-all shadow-sm shrink-0"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isBackingUp || syncStatus === "pending" ? "animate-spin" : ""}`} />
+                            Forcer la synchro
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setIsSyncPopoverOpen(false);
+                              requireAdmin("Connectez-vous en tant qu'administrateur (AdminRoot#0) pour forcer la synchronisation Cloud.");
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-semibold rounded-lg text-[11px] transition-all shrink-0"
+                          >
+                            <Lock className="w-3 h-3 text-amber-600" />
+                            <span>Accès Admin</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2193,26 +2351,35 @@ export default function App() {
         </div>
 
         {/* View Grid */}
-        <div className="w-full glass-calendar-wrapper p-2 min-[360px]:p-3 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm">
+        <div className="w-full glass-calendar-wrapper p-2 min-[360px]:p-3 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm overflow-hidden">
           <AnimatePresence mode="wait">
             {viewMode === "annual" ? (
               <motion.div
                 key="annual"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
                 className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
               >
-                {MONTHS.map((_, index) => renderMonth(index))}
+                {MONTHS.map((_, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, delay: index * 0.012, ease: "easeOut" }}
+                  >
+                    {renderMonth(index)}
+                  </motion.div>
+                ))}
               </motion.div>
             ) : (
               <motion.div
                 key={`month-${viewDate.getMonth()}-${viewDate.getFullYear()}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
                 className="max-w-[500px] mx-auto w-full"
               >
                 {renderMonth(viewDate.getMonth(), true)}
@@ -2239,6 +2406,18 @@ export default function App() {
           >
             WebmasterGO
           </a>
+          {isAdmin && (
+            <>
+              <span className="hidden sm:inline text-slate-300">|</span>
+              <button
+                onClick={() => setIsExportGuideOpen(true)}
+                className="text-slate-700 hover:text-slate-900 transition-colors underline font-semibold flex items-center gap-1.5 px-2 py-0.5 rounded-lg hover:bg-slate-100/80"
+              >
+                <Smartphone className="w-4 h-4 text-sky-600" />
+                <span>Exporter (iOS, Android, Web)</span>
+              </button>
+            </>
+          )}
         </footer>
       </div>
 
@@ -2785,14 +2964,24 @@ export default function App() {
                         {lastBackupTime || "Aucune sauvegarde"}
                       </span>
                     </div>
-                    <button
-                      onClick={handleForceBackup}
-                      disabled={isBackingUp}
-                      className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-semibold rounded-xl transition-all text-xs border border-slate-200 active:scale-95 shrink-0 shadow-sm"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isBackingUp ? "animate-spin" : ""}`} />
-                      {isBackingUp ? "Synchro..." : "Sauvegarder"}
-                    </button>
+                    {isAdmin ? (
+                      <button
+                        onClick={handleForceBackup}
+                        disabled={isBackingUp}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-semibold rounded-xl transition-all text-xs border border-slate-200 active:scale-95 shrink-0 shadow-sm"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isBackingUp ? "animate-spin" : ""}`} />
+                        {isBackingUp ? "Synchro..." : "Sauvegarder l'ensemble"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => requireAdmin("Connectez-vous en tant qu'administrateur (AdminRoot#0) pour sauvegarder l'ensemble des données.")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-semibold rounded-xl transition-all text-xs active:scale-95 shrink-0 shadow-sm"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Sauvegarder (Admin)</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="border-t border-slate-100 pt-4">
@@ -3174,6 +3363,9 @@ export default function App() {
               </button>
               <button
                 onClick={() => {
+                  if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour enregistrer des modifications sur le planning.")) {
+                    return;
+                  }
                   setOverrides((prev) => {
                     const next = { ...prev };
                     selectedDates.forEach((date) => {
@@ -3312,7 +3504,13 @@ export default function App() {
               </div>
 
               <button
-                onClick={() => setIsAddingLeave((prev) => !prev)}
+                onClick={() => {
+                  if (!isAdmin && !isAddingLeave) {
+                    requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour ajouter un congé.");
+                    return;
+                  }
+                  setIsAddingLeave((prev) => !prev);
+                }}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#10a37f] hover:bg-[#0c8c6c] text-white text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-sm active:scale-95"
               >
                 <Plus className="w-4 h-4" />
@@ -3390,6 +3588,9 @@ export default function App() {
                   </button>
                   <button
                     onClick={() => {
+                      if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour enregistrer un congé.")) {
+                        return;
+                      }
                       if (!addLeaveStartDate || !addLeaveEndDate) return;
                       const start = new Date(addLeaveStartDate + "T00:00:00");
                       const end = new Date(addLeaveEndDate + "T00:00:00");
@@ -3508,6 +3709,9 @@ export default function App() {
                       <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                         <button
                           onClick={() => {
+                            if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour supprimer un congé.")) {
+                              return;
+                            }
                             setOverrides((prev) => {
                               const next = { ...prev };
                               period.days.forEach((d) => {
@@ -3541,6 +3745,473 @@ export default function App() {
                 Fermer
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export & Cross-Platform Deployment Modal */}
+      {isExportGuideOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-md">
+          <div className="glass-modal w-full max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] bg-white animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-sky-500/20 rounded-2xl border border-sky-400/30 text-sky-400">
+                  <Smartphone className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    Guide d'Exportation & App Mobile (iOS / Android / Web)
+                  </h2>
+                  <p className="text-xs sm:text-sm text-slate-300">
+                    Comment exporter votre projet PlanMasterGO et l'implémenter partout
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsExportGuideOpen(false)}
+                className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex items-center gap-1 sm:gap-2 p-2 bg-slate-100 border-b border-slate-200 overflow-x-auto text-xs sm:text-sm font-semibold scrollbar-none">
+              <button
+                onClick={() => setActiveExportTab("export")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
+                  activeExportTab === "export"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <Download className="w-4 h-4 text-emerald-600" />
+                <span>1. Exporter Code</span>
+              </button>
+              <button
+                onClick={() => setActiveExportTab("ios")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
+                  activeExportTab === "ios"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <span className="text-base leading-none">🍎</span>
+                <span>2. App iOS</span>
+              </button>
+              <button
+                onClick={() => setActiveExportTab("android")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
+                  activeExportTab === "android"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <span className="text-base leading-none">🤖</span>
+                <span>3. App Android</span>
+              </button>
+              <button
+                onClick={() => setActiveExportTab("hosting")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
+                  activeExportTab === "hosting"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <Globe className="w-4 h-4 text-sky-600" />
+                <span>4. Hébergeurs Web</span>
+              </button>
+              <button
+                onClick={() => setActiveExportTab("pwa")}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl transition-all whitespace-nowrap ${
+                  activeExportTab === "pwa"
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <Smartphone className="w-4 h-4 text-purple-600" />
+                <span>5. PWA Directe</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-slate-700 text-sm leading-relaxed">
+              {/* Tab 1: Export Code */}
+              {activeExportTab === "export" && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3 text-emerald-900">
+                    <Download className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold text-base">Étape 1 : Exporter le projet depuis Google AI Studio</h3>
+                      <p className="text-xs sm:text-sm text-emerald-800 mt-1">
+                        Vous pouvez exporter la totalité du code source sous forme de fichier ZIP ou le synchroniser directement sur votre compte GitHub.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2">
+                      <div className="flex items-center gap-2 text-slate-900 font-bold">
+                        <Code2 className="w-4 h-4 text-indigo-600" />
+                        <span>Option A : Télécharger le ZIP</span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        1. Cliquez sur le menu de paramètres en haut à droite de Google AI Studio.<br />
+                        2. Sélectionnez <strong>"Download ZIP"</strong> ou <strong>"Export ZIP"</strong>.<br />
+                        3. Extrayez l'archive `.zip` sur votre ordinateur.
+                      </p>
+                    </div>
+
+                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2">
+                      <div className="flex items-center gap-2 text-slate-900 font-bold">
+                        <Share2 className="w-4 h-4 text-purple-600" />
+                        <span>Option B : Synchroniser avec GitHub</span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        1. Dans le menu AI Studio, choisissez <strong>"Export to GitHub"</strong>.<br />
+                        2. Connectez votre compte GitHub pour créer un nouveau dépôt privé ou public.<br />
+                        3. Récupérez le repo avec `git clone &lt;votre-url-github&gt;`.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-900 text-slate-100 rounded-2xl font-mono text-xs space-y-2">
+                    <div className="flex items-center justify-between text-slate-400 font-sans text-xs mb-1">
+                      <span className="flex items-center gap-1.5 font-bold text-slate-200">
+                        <Terminal className="w-4 h-4 text-sky-400" />
+                        Lancer le projet en local sur votre ordinateur :
+                      </span>
+                    </div>
+                    <p className="text-slate-400"># 1. Allez dans le dossier du projet</p>
+                    <p className="text-emerald-400">cd planmastergo</p>
+                    <p className="text-slate-400"># 2. Installez les dépendances</p>
+                    <p className="text-emerald-400">npm install</p>
+                    <p className="text-slate-400"># 3. Lancez le serveur de développement local</p>
+                    <p className="text-emerald-400">npm run dev</p>
+                    <p className="text-slate-400"># Votre application s'ouvre sur http://localhost:3000 !</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 2: iOS */}
+              {activeExportTab === "ios" && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl flex items-start gap-3 text-sky-950">
+                    <span className="text-2xl shrink-0">🍎</span>
+                    <div>
+                      <h3 className="font-bold text-base">Créer une application Native iOS (iPhone & iPad)</h3>
+                      <p className="text-xs sm:text-sm text-sky-900 mt-1">
+                        Utilisez <strong>Capacitor</strong> pour transformer ce projet React en application native Xcode installable sur iPhone.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                    <strong>Prérequis :</strong> Un ordinateur Mac avec <strong>Xcode</strong> (gratuit sur l'App Store Mac).
+                  </div>
+
+                  <div className="p-4 bg-slate-900 text-slate-100 rounded-2xl font-mono text-xs space-y-2">
+                    <div className="text-slate-400 font-sans font-bold text-xs mb-2 text-slate-200">
+                      Commandes terminal dans votre dossier exporté :
+                    </div>
+                    <p className="text-slate-400"># 1. Installez Capacitor CLI et le noyau</p>
+                    <p className="text-sky-300">npm install @capacitor/core @capacitor/cli</p>
+                    <p className="text-sky-300">npx cap init PlanMasterGO com.planmastergo.app</p>
+
+                    <p className="text-slate-400 mt-2"># 2. Ajoutez le support iOS</p>
+                    <p className="text-sky-300">npm install @capacitor/ios</p>
+                    <p className="text-sky-300">npx cap add ios</p>
+
+                    <p className="text-slate-400 mt-2"># 3. Compilez votre application web</p>
+                    <p className="text-sky-300">npm run build</p>
+
+                    <p className="text-slate-400 mt-2"># 4. Synchronisez le code avec Xcode</p>
+                    <p className="text-sky-300">npx cap sync</p>
+
+                    <p className="text-slate-400 mt-2"># 5. Ouvrez le projet dans Xcode</p>
+                    <p className="text-emerald-400 font-bold">npx cap open ios</p>
+                  </div>
+
+                  <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2 text-xs">
+                    <h4 className="font-bold text-slate-900 text-sm">Dans Xcode :</h4>
+                    <ol className="list-decimal list-inside space-y-1 text-slate-600">
+                      <li>Sélectionnez votre iPhone connecté ou un simulateur iOS (ex: iPhone 16 Pro).</li>
+                      <li>Cliquez sur le bouton <strong>Run ▶️</strong> en haut à gauche.</li>
+                      <li>L'application s'installe et s'exécute immédiatement sur votre iPhone !</li>
+                      <li>Pour l'App Store : allez dans <strong>Product -&gt; Archive</strong> pour envoyer sur TestFlight / App Store.</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 3: Android */}
+              {activeExportTab === "android" && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3 text-emerald-950">
+                    <span className="text-2xl shrink-0">🤖</span>
+                    <div>
+                      <h3 className="font-bold text-base">Créer une application Native Android (APK & Play Store)</h3>
+                      <p className="text-xs sm:text-sm text-emerald-900 mt-1">
+                        Générez un fichier `.apk` installable ou un `.aab` pour le Google Play Store en quelques commandes.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-800">
+                    <strong>Prérequis :</strong> Téléchargez et installez <strong>Android Studio</strong> (gratuit sur Windows, Mac et Linux).
+                  </div>
+
+                  <div className="p-4 bg-slate-900 text-slate-100 rounded-2xl font-mono text-xs space-y-2">
+                    <div className="text-slate-400 font-sans font-bold text-xs mb-2 text-slate-200">
+                      Commandes terminal dans votre dossier exporté :
+                    </div>
+                    <p className="text-slate-400"># 1. Installez Capacitor CLI et le noyau</p>
+                    <p className="text-emerald-300">npm install @capacitor/core @capacitor/cli</p>
+                    <p className="text-emerald-300">npx cap init PlanMasterGO com.planmastergo.app</p>
+
+                    <p className="text-slate-400 mt-2"># 2. Ajoutez le support Android</p>
+                    <p className="text-emerald-300">npm install @capacitor/android</p>
+                    <p className="text-emerald-300">npx cap add android</p>
+
+                    <p className="text-slate-400 mt-2"># 3. Compilez votre application web</p>
+                    <p className="text-emerald-300">npm run build</p>
+
+                    <p className="text-slate-400 mt-2"># 4. Synchronisez le code avec Android Studio</p>
+                    <p className="text-emerald-300">npx cap sync</p>
+
+                    <p className="text-slate-400 mt-2"># 5. Ouvrez Android Studio</p>
+                    <p className="text-emerald-400 font-bold">npx cap open android</p>
+                  </div>
+
+                  <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2 text-xs">
+                    <h4 className="font-bold text-slate-900 text-sm">Générer le fichier APK dans Android Studio :</h4>
+                    <ol className="list-decimal list-inside space-y-1 text-slate-600">
+                      <li>Une fois Android Studio ouvert, attendez l'indexation de Gradle.</li>
+                      <li>Allez dans le menu du haut : <strong>Build -&gt; Build Bundle(s) / APK(s) -&gt; Build APK(s)</strong>.</li>
+                      <li>Cliquez sur <strong>locate</strong> pour récupérer votre fichier `.apk` prêt à être envoyé par email ou WhatsApp sur n'importe quel téléphone Android !</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Hosting */}
+              {activeExportTab === "hosting" && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl flex items-start gap-3 text-purple-950">
+                    <Globe className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold text-base">Déployer sur différents hébergeurs Web</h3>
+                      <p className="text-xs sm:text-sm text-purple-900 mt-1">
+                        Ce projet est prêt pour une mise en ligne instantanée sur Vercel, Netlify, Render, Cloud Run, Firebase ou n'importe quel serveur VPS / Docker.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                        <Server className="w-4 h-4 text-emerald-600" />
+                        <span>Vercel / Netlify (Gratuit)</span>
+                      </div>
+                      <p className="text-slate-600">
+                        1. Poussez votre code sur GitHub.<br />
+                        2. Créez un projet sur Vercel ou Netlify en connectant GitHub.<br />
+                        3. Commande de build : <code className="bg-slate-200 px-1 py-0.5 rounded">npm run build</code><br />
+                        4. Dossier de sortie : <code className="bg-slate-200 px-1 py-0.5 rounded">dist</code><br />
+                        5. Déploiement automatique à chaque commit !
+                      </p>
+                    </div>
+
+                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                        <Database className="w-4 h-4 text-amber-600" />
+                        <span>Firebase Hosting</span>
+                      </div>
+                      <p className="text-slate-600">
+                        1. Installez Firebase CLI : <code className="bg-slate-200 px-1 py-0.5 rounded">npx firebase-tools init</code><br />
+                        2. Choisissez Hosting et définissez le dossier public sur <code className="bg-slate-200 px-1 py-0.5 rounded">dist</code>.<br />
+                        3. Compilez : <code className="bg-slate-200 px-1 py-0.5 rounded">npm run build</code><br />
+                        4. Déployez : <code className="bg-slate-200 px-1 py-0.5 rounded">npx firebase-tools deploy</code>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-900 text-slate-100 rounded-2xl font-mono text-xs space-y-2">
+                    <div className="text-slate-400 font-sans font-bold text-xs mb-1 text-slate-200">
+                      Serveur Node.js Fullstack (Docker / Cloud Run / VPS / Render) :
+                    </div>
+                    <p className="text-slate-400"># Compile le frontend Vite et le serveur Express backend en un fichier unique bundle dist/server.cjs</p>
+                    <p className="text-emerald-400">npm run build</p>
+                    <p className="text-slate-400"># Lance le serveur Express autonome sur le port 3000</p>
+                    <p className="text-emerald-400">npm start</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 5: PWA */}
+              {activeExportTab === "pwa" && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-start gap-3 text-indigo-950">
+                    <Smartphone className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold text-base">Installation PWA Instantanée (Sans Store)</h3>
+                      <p className="text-xs sm:text-sm text-indigo-900 mt-1">
+                        Le fichier <code className="bg-indigo-100 px-1 rounded">manifest.json</code> est déjà configuré. Tout utilisateur peut installer l'application directement depuis son navigateur web !
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                        <span>📱 iPhone & iPad (Safari)</span>
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        1. Ouvrez le lien de votre site dans Safari.<br />
+                        2. Appuyez sur le bouton <strong>Partager</strong> (carré avec flèche vers le haut).<br />
+                        3. Faites défiler et appuyez sur <strong>"Sur l'écran d'accueil"</strong>.<br />
+                        4. L'icône PlanMasterGO apparaît sur votre écran d'accueil comme une vraie app !
+                      </p>
+                    </div>
+
+                    <div className="p-4 border border-slate-200 rounded-2xl bg-slate-50 space-y-2">
+                      <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
+                        <span>🤖 Smartphones Android (Chrome)</span>
+                      </div>
+                      <p className="text-slate-600 leading-relaxed">
+                        1. Ouvrez le lien de votre site dans Google Chrome.<br />
+                        2. Appuyez sur le menu (les 3 petits points en haut à droite).<br />
+                        3. Sélectionnez <strong>"Installer l'application"</strong> ou <strong>"Ajouter à l'écran d'accueil"</strong>.<br />
+                        4. Profitez de l'application en plein écran avec accès hors-ligne !
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <span className="text-slate-500 font-medium text-center sm:text-left">
+                💡 Conseil : Les données sauvegardées dans le Cloud Firebase sont automatiquement synchronisées sur tous vos appareils !
+              </span>
+              <button
+                onClick={() => setIsExportGuideOpen(false)}
+                className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl transition-all shadow-sm"
+              >
+                Compris, Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Authentication Modal */}
+      {isAdminLoginModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="glass-modal w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden bg-white animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-amber-500/20 border border-amber-400/30 rounded-xl text-amber-400 shrink-0">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold tracking-tight text-white">Espace Administration</h2>
+                  <p className="text-xs text-slate-300">Authentification administrateur PlanMasterGO</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAdminLoginModalOpen(false);
+                  setAdminLoginError(null);
+                  setAdminModalNotice(null);
+                }}
+                className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleAdminLogin} className="p-6 space-y-4 text-slate-800">
+              {adminModalNotice && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{adminModalNotice}</span>
+                </div>
+              )}
+
+              {adminLoginError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span className="font-medium">{adminLoginError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Identifiant Administrateur
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={adminUsernameInput}
+                    onChange={(e) => setAdminUsernameInput(e.target.value)}
+                    placeholder="ex: AdminRoot#0"
+                    className="w-full border-slate-200 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500/20 py-2.5 pl-9 pr-3 border text-sm outline-none transition-all font-mono text-slate-800"
+                    required
+                  />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Mot de passe
+                </label>
+                <div className="relative">
+                  <input
+                    type={showAdminPassword ? "text" : "password"}
+                    value={adminPasswordInput}
+                    onChange={(e) => setAdminPasswordInput(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full border-slate-200 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500/20 py-2.5 pl-9 pr-10 border text-sm outline-none transition-all font-mono text-slate-800"
+                    required
+                  />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-1"
+                  >
+                    {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAdminLoginModalOpen(false);
+                    setAdminLoginError(null);
+                    setAdminModalNotice(null);
+                  }}
+                  className="px-4 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors text-sm"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-xl transition-all shadow-md active:scale-95 text-sm flex items-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Se connecter
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
