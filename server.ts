@@ -30,7 +30,7 @@ app.post("/api/notify", async (req, res) => {
            type: "sms", 
            to, 
            message,
-           info: "Pour de vrais envois de SMS, configurez les variables d'environnement TWILIO_* (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER) dans les Secrets des paramètres de Google AI Studio (bouton engrenage)." 
+           info: "Pour de vrais envois de SMS, configurez les variables d'environnement TWILIO_* (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER) dans les Secrets des paramètres de l'application." 
          });
       }
       
@@ -55,7 +55,7 @@ app.post("/api/notify", async (req, res) => {
           type: "email",
           to,
           message,
-          info: "Pour de vrais envois d'emails, configurez les variables d'environnement SMTP_* (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) dans les Secrets des paramètres de Google AI Studio (bouton engrenage)."
+          info: "Pour de vrais envois d'emails, configurez les variables d'environnement SMTP_* (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) dans les Secrets des paramètres de l'application."
         });
       }
 

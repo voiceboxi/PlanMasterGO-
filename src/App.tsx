@@ -21,6 +21,9 @@ import {
   ChevronDown,
   Settings,
   Cloud,
+  CloudOff,
+  AlertCircle,
+  CheckCircle2,
   Copy,
   Database,
   RefreshCw,
@@ -31,6 +34,11 @@ import {
   Clock,
   Calendar,
   Eye,
+  Palmtree,
+  Plus,
+  Trash2,
+  Filter,
+  Plane,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -272,6 +280,16 @@ export default function App() {
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [isRestModalOpen, setIsRestModalOpen] = useState(false);
 
+  // Leave / Congés Modal State
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [leaveModalYear, setLeaveModalYear] = useState<number>(year);
+  const [leaveModalFilter, setLeaveModalFilter] = useState<"all" | "holiday" | "sick">("all");
+  const [isAddingLeave, setIsAddingLeave] = useState(false);
+  const [addLeaveStartDate, setAddLeaveStartDate] = useState("");
+  const [addLeaveEndDate, setAddLeaveEndDate] = useState("");
+  const [addLeaveState, setAddLeaveState] = useState<"holiday" | "sick">("holiday");
+  const [addLeaveNote, setAddLeaveNote] = useState("");
+
   const [restChoices, setRestChoices] = useState<string[]>(() => {
     const saved = localStorage.getItem("planmastergo_rest_choices") || localStorage.getItem("webmastergo_rest_choices") || localStorage.getItem("planmaster_rest_choices");
     if (saved) {
@@ -339,6 +357,11 @@ export default function App() {
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
+
+  type SyncStatus = "pending" | "saved" | "error";
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("saved");
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSyncPopoverOpen, setIsSyncPopoverOpen] = useState(false);
   
   const [appPin, setAppPin] = useState<string>("");
   const [isLocked, setIsLocked] = useState(false);
@@ -389,6 +412,8 @@ export default function App() {
       }
 
       try {
+        setSyncStatus("pending");
+        setSyncError(null);
         const docRef = doc(db, "user_settings", deviceId);
         const docSnap = await getDoc(docRef);
         
@@ -443,7 +468,10 @@ export default function App() {
             }
           }
         }
-      } catch (e) {
+        setSyncStatus("saved");
+      } catch (e: any) {
+        setSyncStatus("error");
+        setSyncError(e?.message || "Erreur de connexion Cloud");
         handleFirestoreError(e, OperationType.GET, `user_settings/${deviceId}`);
       } finally {
         setIsSettingsLoaded(true);
@@ -528,6 +556,9 @@ export default function App() {
     localStorage.setItem("planmastergo_pin", appPin);
     localStorage.setItem("planmastergo_local_update_time", Date.now().toString());
 
+    setSyncStatus("pending");
+    setSyncError(null);
+
     try {
       const backupTime = new Date().toISOString();
       await setDoc(doc(db, "user_settings", deviceId), {
@@ -541,7 +572,10 @@ export default function App() {
         updatedAt: backupTime,
       });
       setLastBackupTime(new Date(backupTime).toLocaleString("fr-FR"));
-    } catch (e) {
+      setSyncStatus("saved");
+    } catch (e: any) {
+      setSyncStatus("error");
+      setSyncError(e?.message || "Erreur de sauvegarde Cloud");
       handleFirestoreError(e, OperationType.WRITE, `user_settings/${deviceId}`);
     }
 
@@ -561,6 +595,9 @@ export default function App() {
 
   const handleForceBackup = async () => {
     setIsBackingUp(true);
+    setSyncStatus("pending");
+    setSyncError(null);
+
     try {
       const backupTime = new Date().toISOString();
       await setDoc(doc(db, "user_settings", deviceId), {
@@ -574,6 +611,7 @@ export default function App() {
         updatedAt: backupTime,
       });
       setLastBackupTime(new Date(backupTime).toLocaleString("fr-FR"));
+      setSyncStatus("saved");
       
       setActiveToast({
         id: "backup-success",
@@ -584,8 +622,10 @@ export default function App() {
       setTimeout(() => {
         setActiveToast((current) => current?.id === "backup-success" ? null : current);
       }, 3000);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error backing up settings:", e);
+      setSyncStatus("error");
+      setSyncError(e?.message || "Erreur de sauvegarde forcée");
       handleFirestoreError(e, OperationType.WRITE, `user_settings/${deviceId}`);
     } finally {
       setIsBackingUp(false);
@@ -604,6 +644,9 @@ export default function App() {
     }
     
     setIsImporting(true);
+    setSyncStatus("pending");
+    setSyncError(null);
+
     try {
       const docRef = doc(db, "user_settings", trimmedCode);
       const docSnap = await getDoc(docRef);
@@ -616,6 +659,7 @@ export default function App() {
           if (enteredPin !== data.pin) {
             alert("Code PIN incorrect. L'importation a été annulée.");
             setIsImporting(false);
+            setSyncStatus("saved");
             return;
           }
         }
@@ -651,6 +695,8 @@ export default function App() {
           }
         }
         
+        setSyncStatus("saved");
+
         setActiveToast({
           id: "import-success",
           title: "Importation réussie",
@@ -663,10 +709,14 @@ export default function App() {
         
         setImportCode("");
       } else {
+        setSyncStatus("error");
+        setSyncError("Profil introuvable pour ce code");
         alert("Aucune donnée trouvée pour ce code de synchronisation. Veuillez vérifier le code saisi.");
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error importing settings:", e);
+      setSyncStatus("error");
+      setSyncError(e?.message || "Erreur lors de l'importation");
       alert("Erreur lors de la synchronisation avec le serveur. Veuillez réessayer.");
     } finally {
       setIsImporting(false);
@@ -679,7 +729,11 @@ export default function App() {
     
     const saveToCloud = async () => {
       setIsAutoSaving(true);
+      setSyncStatus("pending");
+      setSyncError(null);
+
       try {
+        const backupTime = new Date().toISOString();
         await setDoc(doc(db, "user_settings", deviceId), {
           deviceId: deviceId,
           email: notificationEmail,
@@ -688,13 +742,16 @@ export default function App() {
           overrides: overrides,
           restChoices: restChoices,
           showFrenchHolidays: showFrenchHolidays,
-          updatedAt: new Date().toISOString(),
+          updatedAt: backupTime,
         });
-        setLastBackupTime(new Date().toLocaleString("fr-FR"));
-      } catch (e) {
+        setLastBackupTime(new Date(backupTime).toLocaleString("fr-FR"));
+        setSyncStatus("saved");
+      } catch (e: any) {
         console.error("Auto backup error:", e);
+        setSyncStatus("error");
+        setSyncError(e?.message || "Erreur de connexion au serveur Cloud");
       } finally {
-        setTimeout(() => setIsAutoSaving(false), 1000);
+        setTimeout(() => setIsAutoSaving(false), 800);
       }
     };
     
@@ -876,6 +933,89 @@ export default function App() {
       date.getMonth() === today.getMonth() &&
       date.getFullYear() === today.getFullYear()
     );
+  };
+
+  const getLeaveDaysAndPeriods = (yearNum: number) => {
+    const daysList: {
+      date: Date;
+      key: string;
+      state: "holiday" | "sick";
+      note?: string;
+      isOverride: boolean;
+    }[] = [];
+
+    const startYear = new Date(yearNum, 0, 1);
+    const endYear = new Date(yearNum, 11, 31);
+
+    for (let d = new Date(startYear); d <= endYear; d.setDate(d.getDate() + 1)) {
+      const state = getDayState(d);
+      if (state === "holiday" || state === "sick") {
+        const key = getDateKey(d);
+        daysList.push({
+          date: new Date(d),
+          key,
+          state,
+          note: overrides[key]?.note,
+          isOverride: !!overrides[key],
+        });
+      }
+    }
+
+    interface LeavePeriod {
+      id: string;
+      state: "holiday" | "sick";
+      startDate: Date;
+      endDate: Date;
+      daysCount: number;
+      days: typeof daysList;
+      notes: string[];
+    }
+
+    const periods: LeavePeriod[] = [];
+    let currentPeriod: LeavePeriod | null = null;
+
+    daysList.forEach((item) => {
+      if (!currentPeriod) {
+        currentPeriod = {
+          id: `${item.state}-${item.key}`,
+          state: item.state,
+          startDate: item.date,
+          endDate: item.date,
+          daysCount: 1,
+          days: [item],
+          notes: item.note ? [item.note] : [],
+        };
+      } else {
+        const diffMs = item.date.getTime() - currentPeriod.endDate.getTime();
+        const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 1 && item.state === currentPeriod.state) {
+          currentPeriod.endDate = item.date;
+          currentPeriod.daysCount += 1;
+          currentPeriod.days.push(item);
+          if (item.note && !currentPeriod.notes.includes(item.note)) {
+            currentPeriod.notes.push(item.note);
+          }
+        } else {
+          periods.push(currentPeriod);
+          currentPeriod = {
+            id: `${item.state}-${item.key}`,
+            state: item.state,
+            startDate: item.date,
+            endDate: item.date,
+            daysCount: 1,
+            days: [item],
+            notes: item.note ? [item.note] : [],
+          };
+        }
+      }
+    });
+
+    if (currentPeriod) {
+      periods.push(currentPeriod);
+    }
+
+    return { daysList, periods };
   };
 
   const handleExportExcel = () => {
@@ -1064,6 +1204,9 @@ export default function App() {
     let startDayOfWeek = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
 
     const days = [];
+    let workCount = 0;
+    let restCount = 0;
+
     const emptyCellClass = isLarge
       ? "mx-auto w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12"
       : "mx-auto w-7 h-7 sm:w-8 sm:h-8";
@@ -1075,6 +1218,13 @@ export default function App() {
     for (let d = 1; d <= daysInMonth; d++) {
       const currentDate = new Date(year, monthIndex, d);
       const state = getDayState(currentDate);
+
+      if (state === "work" || state === "training" || state === "rest1" || state === "6thday") {
+        workCount++;
+      } else if (state === "rest" || state === "holiday" || state === "sick" || state === "children") {
+        restCount++;
+      }
+
       const today = isToday(currentDate);
       const key = getDateKey(currentDate);
       const hasNote = !!overrides[key]?.note;
@@ -1205,30 +1355,64 @@ export default function App() {
       );
     }
 
+    const workPct = daysInMonth > 0 ? Math.round((workCount / daysInMonth) * 100) : 0;
+    const restPct = daysInMonth > 0 ? Math.round((restCount / daysInMonth) * 100) : 0;
+
     const id = pdfMode ? `pdf-month-${monthIndex}` : `month-${monthIndex}`;
     return (
       <div
         id={id}
         key={monthIndex}
-        className={`glass-panel rounded-2xl ${isLarge ? "p-2 min-[360px]:p-3 sm:p-6 md:p-8" : "p-2 min-[360px]:p-2.5 sm:p-5"} flex flex-col w-full`}
+        className={`glass-panel rounded-2xl ${isLarge ? "p-2 min-[360px]:p-3 sm:p-6 md:p-8" : "p-2 min-[360px]:p-2.5 sm:p-5"} flex flex-col justify-between w-full`}
       >
-        <h3
-          className={`text-center font-bold text-slate-800 ${isLarge ? "text-lg sm:text-2xl mb-3 sm:mb-6" : "text-sm mb-2 sm:mb-4"}`}
-        >
-          {MONTHS[monthIndex]}
-        </h3>
-        <div
-          className={`grid grid-cols-7 ${isLarge ? "gap-y-1.5 sm:gap-y-4 gap-x-0.5 sm:gap-x-2" : "gap-y-1 gap-x-0.5"}`}
-        >
-          {WEEKDAYS.map((day) => (
+        <div>
+          <h3
+            className={`text-center font-bold text-slate-800 ${isLarge ? "text-lg sm:text-2xl mb-3 sm:mb-6" : "text-sm mb-2 sm:mb-4"}`}
+          >
+            {MONTHS[monthIndex]}
+          </h3>
+          <div
+            className={`grid grid-cols-7 ${isLarge ? "gap-y-1.5 sm:gap-y-4 gap-x-0.5 sm:gap-x-2" : "gap-y-1 gap-x-0.5"}`}
+          >
+            {WEEKDAYS.map((day) => (
+              <div
+                key={day}
+                className={`text-center font-semibold text-slate-400 mb-1 sm:mb-2 ${isLarge ? "text-xs sm:text-sm" : "text-[11px] sm:text-[12px]"}`}
+              >
+                {day}
+              </div>
+            ))}
+            {days}
+          </div>
+        </div>
+
+        {/* Gauge de densité du rythme de travail */}
+        <div className="mt-3 sm:mt-4 pt-2 border-t border-slate-100/80 flex flex-col gap-1">
+          <div className="flex items-center justify-between text-[10px] sm:text-xs font-semibold text-slate-600">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#fde047] border border-amber-300 shrink-0"></span>
+              <span className="truncate">{workCount}j Travail</span>
+              <span className="text-[9px] text-slate-400 font-normal">({workPct}%)</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-[#10a37f] shrink-0"></span>
+              <span className="truncate">{restCount}j Repos</span>
+              <span className="text-[9px] text-slate-400 font-normal">({restPct}%)</span>
+            </span>
+          </div>
+
+          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden flex p-0.5 gap-0.5 border border-slate-200/60 shadow-inner">
             <div
-              key={day}
-              className={`text-center font-semibold text-slate-400 mb-1 sm:mb-2 ${isLarge ? "text-xs sm:text-sm" : "text-[11px] sm:text-[12px]"}`}
-            >
-              {day}
-            </div>
-          ))}
-          {days}
+              className="h-full bg-amber-400 rounded-l-full transition-all duration-300"
+              style={{ width: `${workPct}%` }}
+              title={`Travail / Formation : ${workCount} jours (${workPct}%)`}
+            />
+            <div
+              className="h-full bg-[#10a37f] rounded-r-full transition-all duration-300"
+              style={{ width: `${Math.max(0, 100 - workPct)}%` }}
+              title={`Repos / Congés / Absences : ${restCount} jours (${restPct}%)`}
+            />
+          </div>
         </div>
       </div>
     );
@@ -1322,11 +1506,34 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="flex items-center bg-slate-50/80 border border-slate-200 shadow-sm rounded-lg sm:rounded-xl px-2.5 py-1 sm:px-4 sm:py-2 text-slate-700 font-bold text-sm sm:text-lg tracking-tight">
-            {currentTime.toLocaleTimeString("fr-FR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Cloud Sync Header Badge */}
+            <button
+              onClick={() => setIsSyncPopoverOpen((prev) => !prev)}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-semibold shadow-sm transition-all hover:scale-105 active:scale-95 ${
+                syncStatus === "pending"
+                  ? "bg-amber-50 text-amber-800 border-amber-200/90"
+                  : syncStatus === "error"
+                  ? "bg-rose-50 text-rose-800 border-rose-200/90"
+                  : "bg-emerald-50 text-emerald-800 border-emerald-200/90"
+              }`}
+              title="Statut de la synchronisation cloud en temps réel"
+            >
+              <span className={`w-2 h-2 rounded-full shrink-0 ${
+                syncStatus === "pending" ? "bg-amber-500 animate-ping" : syncStatus === "error" ? "bg-rose-500 animate-pulse" : "bg-emerald-500"
+              }`} />
+              <span className="text-[11px]">
+                {syncStatus === "pending" ? "Synchro..." : syncStatus === "error" ? "Erreur synchro" : "Cloud ok"}
+              </span>
+            </button>
+
+            <div className="flex items-center bg-slate-50/80 border border-slate-200 shadow-sm rounded-lg sm:rounded-xl px-2.5 py-1 sm:px-4 sm:py-2 text-slate-700 font-bold text-sm sm:text-lg tracking-tight">
+              {currentTime.toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
           </div>
         </div>
       </header>
@@ -1417,6 +1624,17 @@ export default function App() {
               Aujourd'hui
             </button>
             <button
+              onClick={() => {
+                setLeaveModalYear(year);
+                setIsLeaveModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
+              title="Gérer mes congés et absences"
+            >
+              <Palmtree className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#A10684]" />
+              Gérer mes congés
+            </button>
+            <button
               onClick={handleExportExcel}
               className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
             >
@@ -1463,6 +1681,134 @@ export default function App() {
             >
               <Settings className="w-3.5 h-3.5" />
             </button>
+
+            {/* Real-time Cloud Sync Indicator */}
+            <div className="relative">
+              <button
+                onClick={() => setIsSyncPopoverOpen((prev) => !prev)}
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm font-semibold border transition-all shadow-sm active:scale-95 ${
+                  syncStatus === "pending"
+                    ? "bg-amber-50/90 text-amber-800 border-amber-200 hover:bg-amber-100"
+                    : syncStatus === "error"
+                    ? "bg-rose-50/90 text-rose-800 border-rose-200 hover:bg-rose-100"
+                    : "bg-emerald-50/90 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                }`}
+                title="Statut de la synchronisation cloud en temps réel"
+              >
+                <span className="relative flex h-2 w-2 shrink-0">
+                  {syncStatus === "pending" && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  )}
+                  {syncStatus === "error" && (
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  )}
+                  <span
+                    className={`relative inline-flex rounded-full h-2 w-2 ${
+                      syncStatus === "pending"
+                        ? "bg-amber-500"
+                        : syncStatus === "error"
+                        ? "bg-rose-500"
+                        : "bg-emerald-500"
+                    }`}
+                  ></span>
+                </span>
+
+                {syncStatus === "pending" && (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600 shrink-0" />
+                    <span className="hidden sm:inline">En attente</span>
+                  </>
+                )}
+
+                {syncStatus === "saved" && (
+                  <>
+                    <Cloud className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span className="hidden sm:inline">Sauvegardé</span>
+                  </>
+                )}
+
+                {syncStatus === "error" && (
+                  <>
+                    <CloudOff className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span className="hidden sm:inline">Erreur</span>
+                  </>
+                )}
+              </button>
+
+              {/* Sync Details Popover */}
+              {isSyncPopoverOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsSyncPopoverOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-72 sm:w-80 p-4 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 text-slate-800">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
+                      <div className="flex items-center gap-2">
+                        {syncStatus === "saved" && <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />}
+                        {syncStatus === "pending" && <RefreshCw className="w-4.5 h-4.5 text-amber-600 animate-spin" />}
+                        {syncStatus === "error" && <AlertCircle className="w-4.5 h-4.5 text-rose-600" />}
+                        <span className="font-bold text-sm text-slate-900">Synchronisation Cloud</span>
+                      </div>
+                      <button
+                        onClick={() => setIsSyncPopoverOpen(false)}
+                        className="p-1 hover:bg-slate-100 rounded-full transition-colors text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                        <span className="text-slate-500 font-medium">Statut :</span>
+                        <span
+                          className={`font-semibold px-2.5 py-0.5 rounded-full text-[11px] ${
+                            syncStatus === "pending"
+                              ? "bg-amber-100 text-amber-800"
+                              : syncStatus === "error"
+                              ? "bg-rose-100 text-rose-800"
+                              : "bg-emerald-100 text-emerald-800"
+                          }`}
+                        >
+                          {syncStatus === "pending" && "En attente / Sauvegarde"}
+                          {syncStatus === "saved" && "Sauvegardé en temps réel"}
+                          {syncStatus === "error" && "Erreur de connexion"}
+                        </span>
+                      </div>
+
+                      {lastBackupTime && (
+                        <div className="flex items-center justify-between px-1 text-slate-600">
+                          <span className="text-slate-400">Dernière synchro :</span>
+                          <span className="font-semibold text-slate-700">{lastBackupTime}</span>
+                        </div>
+                      )}
+
+                      {syncError && (
+                        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] leading-relaxed">
+                          <strong>Détail :</strong> {syncError}
+                        </div>
+                      )}
+
+                      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-slate-400 truncate max-w-[140px]" title={deviceId}>
+                          ID: {deviceId.substring(0, 10)}...
+                        </span>
+                        <button
+                          onClick={() => {
+                            handleForceBackup();
+                          }}
+                          disabled={isBackingUp || syncStatus === "pending"}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-medium rounded-lg text-xs transition-all shadow-sm shrink-0"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isBackingUp || syncStatus === "pending" ? "animate-spin" : ""}`} />
+                          Forcer la synchro
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1882,7 +2228,7 @@ export default function App() {
           <div className="flex items-center justify-center gap-1.5 flex-wrap">
             <FloppyLogo className="w-5 h-5 opacity-80" />
             <span>
-              © {year} <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">PlanMasterGO</span> | Créé par <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">Jimmy</span> |
+              © {year} <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">PlanMasterGO</span> | Créé par <span className="font-roboto font-bold text-slate-900 text-[14px] px-1 inline-block">Jimmy</span> |
             </span>
           </div>
           <a
@@ -2155,7 +2501,7 @@ export default function App() {
                 <div>
                   <p className="font-semibold mb-0.5 text-amber-200">Aucun secret SMTP / Twilio détecté</p>
                   <p>
-                    Pour de vrais envois, veuillez ajouter vos identifiants dans les <strong>Secrets</strong> de l'application (le bouton d'engrenage en haut à droite de Google AI Studio).
+                    Pour de vrais envois, veuillez ajouter vos identifiants dans les <strong>Secrets</strong> des paramètres de l'application.
                   </p>
                   <p className="mt-1 font-medium text-amber-400">
                     PlanMasterGO simule le message ci-dessous en temps réel pour tester votre configuration !
@@ -2852,6 +3198,347 @@ export default function App() {
                 className="px-5 py-2.5 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-medium rounded-xl transition-all shadow-sm shadow-[#10a37f]/20 active:scale-95 text-sm"
               >
                 Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Management Modal */}
+      {isLeaveModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="glass-modal rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 shadow-2xl border border-slate-200">
+            {/* Modal Header */}
+            <div className="px-4 sm:px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/80">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#A10684]/10 rounded-xl text-[#A10684]">
+                  <Palmtree className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base sm:text-lg leading-tight">
+                    Gestion des Congés & Absences
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Récapitulatif chronologique et ajout de jours
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsLeaveModalOpen(false)}
+                className="p-2 hover:bg-slate-200/80 rounded-full transition-colors text-slate-500 hover:text-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Year Selector & Stats Header */}
+            <div className="px-4 sm:px-6 py-3 bg-slate-100/50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              {/* Year Nav */}
+              <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm">
+                <button
+                  onClick={() => setLeaveModalYear((y) => y - 1)}
+                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+                  title="Année précédente"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-bold text-slate-800 text-sm sm:text-base px-1">
+                  {leaveModalYear}
+                </span>
+                <button
+                  onClick={() => setLeaveModalYear((y) => y + 1)}
+                  className="p-1 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors"
+                  title="Année suivante"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Summary Stats */}
+              {(() => {
+                const { daysList } = getLeaveDaysAndPeriods(leaveModalYear);
+                const totalHoliday = daysList.filter((d) => d.state === "holiday").length;
+                const totalSick = daysList.filter((d) => d.state === "sick").length;
+
+                return (
+                  <div className="flex items-center gap-2 flex-wrap text-xs font-medium">
+                    <span className="px-2.5 py-1 bg-[#A10684]/10 text-[#A10684] rounded-lg border border-[#A10684]/20 font-semibold">
+                      Congés : {totalHoliday} j
+                    </span>
+                    <span className="px-2.5 py-1 bg-slate-200 text-slate-700 rounded-lg border border-slate-300 font-semibold">
+                      Maladie : {totalSick} j
+                    </span>
+                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 font-semibold">
+                      Total : {daysList.length} j
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Filter Tabs & Add Button */}
+            <div className="px-4 sm:px-6 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-white">
+              <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                <button
+                  onClick={() => setLeaveModalFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    leaveModalFilter === "all"
+                      ? "bg-white text-slate-800 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Tous
+                </button>
+                <button
+                  onClick={() => setLeaveModalFilter("holiday")}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    leaveModalFilter === "holiday"
+                      ? "bg-[#A10684] text-white shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Congés
+                </button>
+                <button
+                  onClick={() => setLeaveModalFilter("sick")}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    leaveModalFilter === "sick"
+                      ? "bg-slate-700 text-white shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Maladie
+                </button>
+              </div>
+
+              <button
+                onClick={() => setIsAddingLeave((prev) => !prev)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#10a37f] hover:bg-[#0c8c6c] text-white text-xs sm:text-sm font-semibold rounded-xl transition-all shadow-sm active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                {isAddingLeave ? "Fermer la saisie" : "Poser congé / maladie"}
+              </button>
+            </div>
+
+            {/* Add Leave Form (Collapsible) */}
+            {isAddingLeave && (
+              <div className="px-4 sm:px-6 py-4 bg-emerald-50/50 border-b border-emerald-100 space-y-3 animate-in slide-in-from-top-2 duration-150">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                  Nouveau congé / absence sur une période
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Date de début
+                    </label>
+                    <input
+                      type="date"
+                      value={addLeaveStartDate}
+                      onChange={(e) => setAddLeaveStartDate(e.target.value)}
+                      className="w-full text-xs sm:text-sm p-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#10a37f]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Date de fin
+                    </label>
+                    <input
+                      type="date"
+                      value={addLeaveEndDate}
+                      onChange={(e) => setAddLeaveEndDate(e.target.value)}
+                      className="w-full text-xs sm:text-sm p-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#10a37f]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Type d'absence
+                    </label>
+                    <select
+                      value={addLeaveState}
+                      onChange={(e) => setAddLeaveState(e.target.value as "holiday" | "sick")}
+                      className="w-full text-xs sm:text-sm p-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#10a37f]"
+                    >
+                      <option value="holiday">Congés</option>
+                      <option value="sick">Maladie</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Note / Motif (optionnel)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Congés été"
+                      value={addLeaveNote}
+                      onChange={(e) => setAddLeaveNote(e.target.value)}
+                      className="w-full text-xs sm:text-sm p-2 border border-slate-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-[#10a37f]"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setIsAddingLeave(false);
+                      setAddLeaveStartDate("");
+                      setAddLeaveEndDate("");
+                      setAddLeaveNote("");
+                    }}
+                    className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded-lg transition-colors font-medium"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!addLeaveStartDate || !addLeaveEndDate) return;
+                      const start = new Date(addLeaveStartDate + "T00:00:00");
+                      const end = new Date(addLeaveEndDate + "T00:00:00");
+                      if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return;
+
+                      setOverrides((prev) => {
+                        const next = { ...prev };
+                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                          const key = getDateKey(d);
+                          const existingNote = next[key]?.note || "";
+                          const combinedNote = addLeaveNote
+                            ? existingNote
+                              ? `${existingNote} - ${addLeaveNote}`
+                              : addLeaveNote
+                            : existingNote;
+
+                          next[key] = {
+                            ...next[key],
+                            state: addLeaveState,
+                            note: combinedNote,
+                          };
+                        }
+                        return next;
+                      });
+
+                      setIsAddingLeave(false);
+                      setAddLeaveStartDate("");
+                      setAddLeaveEndDate("");
+                      setAddLeaveNote("");
+                    }}
+                    className="px-4 py-1.5 bg-[#10a37f] hover:bg-[#0c8c6c] text-white text-xs font-bold rounded-lg transition-all shadow-sm active:scale-95"
+                  >
+                    Valider et enregistrer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Scrollable Chronological Content */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-3">
+              {(() => {
+                const { periods } = getLeaveDaysAndPeriods(leaveModalYear);
+                const filteredPeriods = periods.filter((p) => {
+                  if (leaveModalFilter === "all") return true;
+                  return p.state === leaveModalFilter;
+                });
+
+                if (filteredPeriods.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-slate-400 space-y-3">
+                      <Palmtree className="w-12 h-12 mx-auto text-slate-300 stroke-[1.5]" />
+                      <p className="text-sm font-medium text-slate-600">
+                        Aucun congé ni journée de maladie répertorié en {leaveModalYear}.
+                      </p>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                        Utilisez le bouton "+ Poser congé / maladie" ci-dessus ou cliquez sur un jour du calendrier pour ajouter une absence.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return filteredPeriods.map((period) => {
+                  const isHoliday = period.state === "holiday";
+                  const startStr = period.startDate.toLocaleDateString("fr-FR", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  });
+                  const endStr = period.endDate.toLocaleDateString("fr-FR", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  });
+
+                  return (
+                    <div
+                      key={period.id}
+                      className="p-4 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-all shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-xs font-bold tracking-wide uppercase ${
+                              isHoliday
+                                ? "bg-[#A10684] text-white"
+                                : "bg-slate-700 text-white"
+                            }`}
+                          >
+                            {isHoliday ? "Congés" : "Maladie"}
+                          </span>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                            {period.daysCount} {period.daysCount > 1 ? "jours" : "jour"}
+                          </span>
+                        </div>
+
+                        <div className="text-sm font-bold text-slate-800">
+                          {period.daysCount === 1 ? (
+                            <span className="capitalize">{startStr}</span>
+                          ) : (
+                            <span>
+                              Du <span className="capitalize">{startStr}</span> au{" "}
+                              <span className="capitalize">{endStr}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {period.notes.length > 0 && (
+                          <div className="text-xs text-slate-600 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                            Note : {period.notes.join(" | ")}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        <button
+                          onClick={() => {
+                            setOverrides((prev) => {
+                              const next = { ...prev };
+                              period.days.forEach((d) => {
+                                delete next[d.key];
+                              });
+                              return next;
+                            });
+                          }}
+                          className="flex items-center gap-1 px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors font-medium"
+                          title="Supprimer ce congé de votre planning"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center rounded-b-2xl">
+              <span className="text-xs text-slate-500 font-medium">
+                PlanMasterGO • Année {leaveModalYear}
+              </span>
+              <button
+                onClick={() => setIsLeaveModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-xl transition-all text-xs sm:text-sm shadow-sm"
+              >
+                Fermer
               </button>
             </div>
           </div>
