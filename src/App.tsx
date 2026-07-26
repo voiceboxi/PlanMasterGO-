@@ -20,6 +20,7 @@ import {
   Coffee,
   ChevronDown,
   Settings,
+  Settings2,
   Cloud,
   CloudOff,
   AlertCircle,
@@ -375,6 +376,21 @@ export default function App() {
   const [isExportGuideOpen, setIsExportGuideOpen] = useState(false);
   const [activeExportTab, setActiveExportTab] = useState<"export" | "ios" | "android" | "hosting" | "pwa">("export");
   
+  const [isGestionMenuOpen, setIsGestionMenuOpen] = useState(false);
+  const gestionMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (gestionMenuRef.current && !gestionMenuRef.current.contains(event.target as Node)) {
+        setIsGestionMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
   const [appPin, setAppPin] = useState<string>("");
   const [isLocked, setIsLocked] = useState(false);
   const [unlockPinInput, setUnlockPinInput] = useState("");
@@ -1730,86 +1746,6 @@ export default function App() {
               <CalendarIcon className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
               Aujourd'hui
             </button>
-            <button
-              onClick={() => {
-                setLeaveModalYear(year);
-                setIsLeaveModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
-              title="Gérer mes congés et absences"
-            >
-              <Palmtree className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#A10684]" />
-              Gérer mes congés
-            </button>
-            <button
-              onClick={handleExportExcel}
-              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              Excel
-            </button>
-            <button
-              onClick={() => setIsPdfModalOpen(true)}
-              disabled={isGeneratingPDF}
-              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors disabled:opacity-70 flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm min-w-[75px] sm:min-w-[100px]"
-            >
-              {isGeneratingPDF ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#10a37f]" />
-                  Création
-                </>
-              ) : (
-                <>
-                  <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  PDF
-                </>
-              )}
-            </button>
-            {isAdmin && (
-              <button
-                onClick={() => setIsExportGuideOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 bg-[#1e293b] hover:bg-[#0f172a] text-white font-medium rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-95 flex-1 sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
-                title="Exporter le projet & Implémenter sous iOS, Android ou Hébergeur Web"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-sky-400" />
-                <span>Export / Mobile</span>
-              </button>
-            )}
-            <button
-              onClick={() => setIsShareModalOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-medium rounded-lg sm:rounded-xl transition-all shadow-sm shadow-[#10a37f]/20 active:scale-95 flex-[2] sm:flex-none justify-center whitespace-nowrap text-xs sm:text-sm"
-            >
-              <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              Partager
-            </button>
-
-            {/* Admin Authentication & Status Pill */}
-            {isAdmin ? (
-              <div className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg sm:rounded-xl text-xs sm:text-sm font-bold shadow-xs shrink-0">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Admin</span>
-                <button
-                  onClick={handleAdminLogout}
-                  className="ml-1 p-1 hover:bg-emerald-200/80 rounded-md transition-colors text-emerald-700 hover:text-emerald-950"
-                  title="Se déconnecter de l'administration"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setAdminModalNotice(null);
-                  setAdminLoginError(null);
-                  setIsAdminLoginModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 font-semibold rounded-lg sm:rounded-xl transition-all shadow-sm active:scale-95 text-xs sm:text-sm shrink-0 border border-slate-700"
-                title="Connexion Administrateur (AdminRoot#0)"
-              >
-                <Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 shrink-0" />
-                <span>Admin</span>
-              </button>
-            )}
             {appPin && (
               <button
                 onClick={() => setIsLocked(true)}
@@ -1971,7 +1907,7 @@ export default function App() {
         </div>
 
         {/* Legend */}
-        <div className="glass-panel flex flex-col gap-2.5 px-3 sm:px-6 py-3 rounded-xl sm:rounded-2xl">
+        <div className="glass-panel relative z-50 flex flex-col gap-2.5 px-3 sm:px-6 py-3 rounded-xl sm:rounded-2xl">
           <div className="flex items-center justify-center gap-3 sm:gap-6 flex-wrap">
             <button
               onClick={() => setIsLegendExpanded(!isLegendExpanded)}
@@ -1990,6 +1926,124 @@ export default function App() {
               <Coffee className="w-3.5 h-3.5" />
               Choix repos
             </button>
+            
+            <div className="relative" ref={gestionMenuRef}>
+              <button
+                onClick={() => setIsGestionMenuOpen(!isGestionMenuOpen)}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2.5 bg-[#e2e8f0] hover:bg-[#cbd5e1] text-slate-700 font-semibold rounded-lg sm:rounded-xl transition-colors border border-slate-200 shrink-0 shadow-sm text-xs sm:text-sm active:scale-95"
+              >
+                <Settings2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                Gestion
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-300 ${isGestionMenuOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              <AnimatePresence>
+                {isGestionMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-1/2 -translate-x-1/2 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-[60] flex flex-col py-1.5"
+                  >
+                    <button
+                      onClick={() => {
+                        setIsGestionMenuOpen(false);
+                        setLeaveModalYear(year);
+                        setIsLeaveModalOpen(true);
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                    >
+                      <Palmtree className="w-4 h-4 text-[#A10684]" />
+                      Gérer mes congés
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsGestionMenuOpen(false);
+                        handleExportExcel();
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      Export Excel
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsGestionMenuOpen(false);
+                        setIsPdfModalOpen(true);
+                      }}
+                      disabled={isGeneratingPDF}
+                      className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left disabled:opacity-50"
+                    >
+                      {isGeneratingPDF ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-[#10a37f]" />
+                      ) : (
+                        <FileText className="w-4 h-4 text-rose-600" />
+                      )}
+                      Export PDF
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsGestionMenuOpen(false);
+                        setIsShareModalOpen(true);
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                    >
+                      <Share2 className="w-4 h-4 text-blue-600" />
+                      Partager
+                    </button>
+                    
+                    <div className="h-px bg-slate-100 my-1 mx-3" />
+                    
+                    {isAdmin ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setIsGestionMenuOpen(false);
+                            setIsExportGuideOpen(true);
+                          }}
+                          className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                        >
+                          <Smartphone className="w-4 h-4 text-sky-500" />
+                          Export Mobile / Web
+                        </button>
+                        <div className="px-3 pt-1 pb-2 flex flex-col gap-1 mt-1">
+                          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold w-full justify-center">
+                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span>Mode Admin</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setIsGestionMenuOpen(false);
+                              handleAdminLogout();
+                            }}
+                            className="flex items-center justify-center gap-1.5 w-full p-1.5 hover:bg-rose-50 rounded-lg transition-colors text-rose-600 text-xs font-medium"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                            Se déconnecter
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setIsGestionMenuOpen(false);
+                          setAdminModalNotice(null);
+                          setAdminLoginError(null);
+                          setIsAdminLoginModalOpen(true);
+                        }}
+                        className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                      >
+                        <Shield className="w-4 h-4 text-amber-500" />
+                        Connexion Admin
+                      </button>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <div
@@ -2376,10 +2430,10 @@ export default function App() {
             ) : (
               <motion.div
                 key={`month-${viewDate.getMonth()}-${viewDate.getFullYear()}`}
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
                 className="max-w-[500px] mx-auto w-full"
               >
                 {renderMonth(viewDate.getMonth(), true)}
@@ -2390,34 +2444,47 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <div className="mt-16 mb-8 px-4 flex justify-center w-full z-10">
-        <footer className="text-center text-sm px-6 py-2.5 font-medium text-slate-600 flex flex-col sm:flex-row items-center gap-1 sm:gap-2">
-          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-            <FloppyLogo className="w-5 h-5 opacity-80" />
-            <span>
-              © {year} <span className="font-handwritten font-bold text-slate-900 text-[14px] px-1 inline-block">PlanMasterGO</span> | Créé par <span className="font-roboto font-bold text-slate-900 text-[14px] px-1 inline-block">Jimmy</span> |
-            </span>
+      <div className="mt-20 mb-12 px-4 flex justify-center w-full z-10">
+        <footer className="text-center w-full max-w-4xl mx-auto flex flex-col items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 text-sm font-medium text-slate-500">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
+                <FloppyLogo className="w-4 h-4 text-slate-600" />
+              </div>
+              <span className="text-slate-600">
+                © {year} <span className="font-handwritten font-bold text-slate-900 text-[15px] px-1">PlanMasterGO</span>
+              </span>
+            </div>
+            
+            <span className="hidden sm:inline text-slate-300">•</span>
+            
+            <a
+              href="https://freemastergoo.byethost7.com/?i=2"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-1.5 text-slate-500 hover:text-[#10a37f] transition-colors"
+            >
+              <span>Distribué par</span>
+              <span className="font-semibold text-slate-700 group-hover:text-[#10a37f] transition-colors underline decoration-slate-300 group-hover:decoration-[#10a37f]/50 underline-offset-4">WebmasterGO</span>
+            </a>
+
+            {isAdmin && (
+              <>
+                <span className="hidden sm:inline text-slate-300">•</span>
+                <button
+                  onClick={() => setIsExportGuideOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors font-semibold border border-slate-200/60"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Exporter App</span>
+                </button>
+              </>
+            )}
           </div>
-          <a
-            href="https://freemastergoo.byethost7.com/?i=2"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#10a37f] hover:text-[#0b7a5e] transition-colors underline whitespace-nowrap font-semibold"
-          >
-            WebmasterGO
-          </a>
-          {isAdmin && (
-            <>
-              <span className="hidden sm:inline text-slate-300">|</span>
-              <button
-                onClick={() => setIsExportGuideOpen(true)}
-                className="text-slate-700 hover:text-slate-900 transition-colors underline font-semibold flex items-center gap-1.5 px-2 py-0.5 rounded-lg hover:bg-slate-100/80"
-              >
-                <Smartphone className="w-4 h-4 text-sky-600" />
-                <span>Exporter (iOS, Android, Web)</span>
-              </button>
-            </>
-          )}
+          
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200/60 text-[11px] font-mono font-semibold text-slate-400">
+            Version 2.2.0
+          </div>
         </footer>
       </div>
 
@@ -4108,10 +4175,23 @@ export default function App() {
       )}
 
       {/* Admin Authentication Modal */}
-      {isAdminLoginModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="glass-modal w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden bg-white animate-in zoom-in-95 duration-200">
-            {/* Header */}
+      <AnimatePresence>
+        {isAdminLoginModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="glass-modal w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden bg-white"
+            >
+              {/* Header */}
             <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-slate-700">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-amber-500/20 border border-amber-400/30 rounded-xl text-amber-400 shrink-0">
@@ -4212,9 +4292,10 @@ export default function App() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
