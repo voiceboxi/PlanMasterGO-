@@ -378,6 +378,8 @@ export default function App() {
   
   const [isGestionMenuOpen, setIsGestionMenuOpen] = useState(false);
   const gestionMenuRef = useRef<HTMLDivElement>(null);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const icsFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -457,6 +459,61 @@ export default function App() {
     setTimeout(() => {
       setActiveToast((current) => (current?.id === "admin-auth-logout" ? null : current));
     }, 3000);
+  };
+
+  const handleICSImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour importer des événements ICS.")) {
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const icsData = event.target?.result as string;
+      const newOverrides = { ...overrides };
+      let updatedCount = 0;
+
+      const lines = icsData.split(/\r?\n/);
+      let currentEvent: any = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        while (i + 1 < lines.length && (lines[i + 1].startsWith(' ') || lines[i + 1].startsWith('\t'))) {
+          i++;
+          line += lines[i].substring(1);
+        }
+
+        if (line.startsWith('BEGIN:VEVENT')) {
+          currentEvent = {};
+        } else if (line.startsWith('END:VEVENT')) {
+          if (currentEvent && currentEvent.startDate) {
+            newOverrides[currentEvent.startDate] = {
+              state: "work",
+              note: currentEvent.summary || "Événement importé (ICS)",
+            };
+            updatedCount++;
+          }
+          currentEvent = null;
+        } else if (currentEvent) {
+          if (line.startsWith('DTSTART')) {
+            const match = line.match(/(\d{4})(\d{2})(\d{2})/);
+            if (match) {
+              currentEvent.startDate = `${match[1]}-${match[2]}-${match[3]}`;
+            }
+          } else if (line.startsWith('SUMMARY:')) {
+            currentEvent.summary = line.substring(8).trim();
+          }
+        }
+      }
+
+      setOverrides(newOverrides);
+      alert(`${updatedCount} événement(s) importé(s) avec succès !`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const [deviceId, setDeviceId] = useState(() => {
@@ -1311,7 +1368,15 @@ export default function App() {
       : "mx-auto w-7 h-7 sm:w-8 sm:h-8";
 
     for (let i = 0; i < startDayOfWeek; i++) {
-      days.push(<div key={`empty-${i}`} className={emptyCellClass}></div>);
+      days.push(
+        <motion.div
+          key={`empty-${monthIndex}-${i}`}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className={emptyCellClass}
+        ></motion.div>
+      );
     }
 
     for (let d = 1; d <= daysInMonth; d++) {
@@ -1383,8 +1448,11 @@ export default function App() {
       else if (state === "children") { stateLabel = "Enfant malade"; dotColor = "#400732"; }
 
       days.push(
-        <div
-          key={d}
+        <motion.div
+          key={key}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3, delay: Math.min(d * 0.01, 0.3), ease: "easeOut" }}
           className="flex justify-center items-center relative group"
         >
           <motion.button
@@ -1392,7 +1460,7 @@ export default function App() {
             className={`${baseClasses} ${stateClasses}`}
             animate={{ scale: isSelectedMulti && !pdfMode ? 1.15 : 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.12, y: -2 }}
             whileTap={{ scale: 0.95 }}
           >
             {d}
@@ -1450,7 +1518,7 @@ export default function App() {
               )}
             </div>
           )}
-        </div>,
+        </motion.div>,
       );
     }
 
@@ -1957,7 +2025,24 @@ export default function App() {
                       className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
                     >
                       <Palmtree className="w-4 h-4 text-[#A10684]" />
-                      Gérer mes congés
+                      Mes Conges
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsGestionMenuOpen(false);
+                        if (icsFileInputRef.current) icsFileInputRef.current.click();
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                    >
+                      <CalendarIcon className="w-4 h-4 text-violet-500" />
+                      Importer .ics
+                      <input 
+                        type="file" 
+                        accept=".ics" 
+                        ref={icsFileInputRef} 
+                        onChange={handleICSImport} 
+                        className="hidden" 
+                      />
                     </button>
                     <button
                       onClick={() => {
@@ -1994,9 +2079,9 @@ export default function App() {
                       <Share2 className="w-4 h-4 text-blue-600" />
                       Partager
                     </button>
-                    
+                      
                     <div className="h-px bg-slate-100 my-1 mx-3" />
-                    
+                      
                     {isAdmin ? (
                       <>
                         <button
@@ -2037,7 +2122,7 @@ export default function App() {
                         className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
                       >
                         <Shield className="w-4 h-4 text-amber-500" />
-                        Connexion Admin
+                        Admin
                       </button>
                     )}
                   </motion.div>
@@ -2482,13 +2567,71 @@ export default function App() {
             )}
           </div>
           
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200/60 text-[11px] font-mono font-semibold text-slate-400">
+          <button 
+            onClick={() => setIsAboutModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200 border border-slate-200/60 transition-colors text-[11px] font-mono font-semibold text-slate-500 hover:text-slate-700 cursor-pointer"
+          >
             Version 2.2.0
-          </div>
+          </button>
         </footer>
       </div>
 
       {/* Modals & Overlays */}
+
+      {/* About Modal */}
+      <AnimatePresence>
+        {isAboutModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="glass-modal w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden bg-white"
+            >
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
+                <h3 className="font-bold text-slate-800 text-lg">
+                  À propos de l'application
+                </h3>
+                <button
+                  onClick={() => setIsAboutModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full p-1.5 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6 text-sm text-slate-600">
+                <div>
+                  <h4 className="font-bold text-slate-800 mb-2">Auteur</h4>
+                  <p>L'application PlanMasterGO a été créée par <span className="font-bold text-slate-800">Jimmy</span>.</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 mb-2">Conditions Générales de Vente (CGV)</h4>
+                  <p>En utilisant cette application, vous acceptez les conditions générales d'utilisation et de vente. L'application est fournie en l'état.</p>
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 mb-2">Gestion des Cookies</h4>
+                  <p>L'application n'utilise que des cookies techniques et le stockage local (localStorage) strictement nécessaires à son bon fonctionnement (sauvegarde locale des préférences, authentification, données de session).</p>
+                </div>
+              </div>
+              <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 rounded-b-2xl border-t border-slate-100">
+                <button
+                  onClick={() => setIsAboutModalOpen(false)}
+                  className="px-4 py-2.5 text-white bg-slate-800 font-medium hover:bg-slate-700 rounded-xl transition-colors text-sm"
+                >
+                  Fermer
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Rest Modal */}
       {isRestModalOpen && (
