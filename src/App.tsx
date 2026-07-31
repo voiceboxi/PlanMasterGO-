@@ -109,6 +109,8 @@ interface CustomDayRecord {
     enabled: boolean;
     type: "in-app" | "email" | "sms";
     time: string;
+    timing?: "48h" | "24h" | "same-day";
+    emailTo?: string;
   };
 }
 type CustomOverrides = Record<string, CustomDayRecord>;
@@ -266,6 +268,8 @@ export default function App() {
     "email",
   );
   const [editReminderTime, setEditReminderTime] = useState("09:00");
+  const [editReminderTiming, setEditReminderTiming] = useState<"48h" | "24h" | "same-day">("48h");
+  const [editReminderEmailInput, setEditReminderEmailInput] = useState<string>("");
 
   // Share Modal State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -915,37 +919,58 @@ export default function App() {
   }, [overrides, restChoices, notificationEmail, notificationPhone, appPin, showFrenchHolidays, deviceId, isSettingsLoaded]);
 
   useEffect(() => {
-    const key = getDateKey(currentTime);
-    const dayData = overrides[key];
+    const todayKey = getDateKey(currentTime);
+    const currentHour = String(currentTime.getHours()).padStart(2, "0");
+    const currentMin = String(currentTime.getMinutes()).padStart(2, "0");
+    const timeStr = `${currentHour}:${currentMin}`;
 
-    if (dayData?.reminder?.enabled) {
-      const currentHour = String(currentTime.getHours()).padStart(2, "0");
-      const currentMin = String(currentTime.getMinutes()).padStart(2, "0");
-      const timeStr = `${currentHour}:${currentMin}`;
+    Object.entries(overrides).forEach(([eventDateKey, dayData]) => {
+      if (!dayData?.reminder?.enabled) return;
 
-      if (dayData.reminder.time === timeStr) {
-        const reminderId = `${key}-${timeStr}`;
+      const timing = dayData.reminder.timing || "same-day";
+      const parts = eventDateKey.split("-").map(Number);
+      if (parts.length !== 3) return;
+      const eventDateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+
+      const triggerDateObj = new Date(eventDateObj);
+      if (timing === "48h") {
+        triggerDateObj.setDate(triggerDateObj.getDate() - 2);
+      } else if (timing === "24h") {
+        triggerDateObj.setDate(triggerDateObj.getDate() - 1);
+      }
+
+      const triggerDateKey = getDateKey(triggerDateObj);
+
+      if (todayKey === triggerDateKey && dayData.reminder.time === timeStr) {
+        const reminderId = `${eventDateKey}-${timing}-${timeStr}`;
         if (!triggeredReminders.has(reminderId)) {
+          const timingTitle = timing === "48h" ? "Rappel 48h avant" : timing === "24h" ? "Rappel 24h avant" : "Rappel aujourd'hui";
+          const eventDateFormatted = eventDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
           setActiveToast({
             id: reminderId,
-            title: `Rappel pour aujourd'hui`,
-            subtitle: dayData.note || "Il y a un événement prévu aujourd'hui.",
+            title: timingTitle,
+            subtitle: `Événement le ${eventDateFormatted} : ${dayData.note || "Note enregistrée"}`,
             type: dayData.reminder.type,
           });
           setTriggeredReminders((prev) => new Set(prev).add(reminderId));
-          
+
           playRingtone();
-          
-          if (dayData.reminder.type === "email" && notificationEmail) {
+
+          const targetEmail = dayData.reminder.emailTo || notificationEmail;
+
+          if (dayData.reminder.type === "email" && targetEmail) {
+            const emailMessage = `Bonjour,\n\nCeci est votre ${timingTitle.toLowerCase()} pour l'événement PlanMasterGO du ${eventDateFormatted}.\n\n📝 Note / Détails : ${dayData.note || "Aucune note"}\n⏰ Heure : ${dayData.appointmentTime || dayData.reminder.time}\n\nCordialement,\nL'équipe PlanMasterGO`;
+
             fetch("/api/notify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: "email", to: notificationEmail, message: dayData.note || "Nouvel événement" })
+              body: JSON.stringify({ type: "email", to: targetEmail, message: emailMessage })
             }).then(async res => {
               const text = await res.text();
               let data: any = {};
               try { data = JSON.parse(text); } catch(e) {}
-              
+
               if (!res.ok) {
                 setActiveToast({
                   id: reminderId + "-error",
@@ -956,23 +981,25 @@ export default function App() {
               } else if (data.simulated) {
                 setSimulatedNotification({
                   type: "email",
-                  to: notificationEmail,
-                  message: dayData.note || "Nouvel événement",
+                  to: targetEmail,
+                  message: emailMessage,
                   info: data.info || ""
                 });
               }
             }).catch(console.error);
           }
+
           if (dayData.reminder.type === "sms" && notificationPhone) {
+            const smsMessage = `PlanMasterGO - ${timingTitle} (${eventDateFormatted}): ${dayData.note || "Rappel"}`;
             fetch("/api/notify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: "sms", to: notificationPhone, message: dayData.note || "Nouvel événement" })
+              body: JSON.stringify({ type: "sms", to: notificationPhone, message: smsMessage })
             }).then(async res => {
               const text = await res.text();
               let data: any = {};
               try { data = JSON.parse(text); } catch(e) {}
-              
+
               if (!res.ok) {
                 setActiveToast({
                   id: reminderId + "-error",
@@ -984,7 +1011,7 @@ export default function App() {
                 setSimulatedNotification({
                   type: "sms",
                   to: notificationPhone,
-                  message: dayData.note || "Nouvel événement",
+                  message: smsMessage,
                   info: data.info || ""
                 });
               }
@@ -999,8 +1026,8 @@ export default function App() {
           }, 8000);
         }
       }
-    }
-  }, [currentTime, overrides, triggeredReminders]);
+    });
+  }, [currentTime, overrides, triggeredReminders, notificationEmail, notificationPhone]);
 
   useEffect(() => {
     // Decoding State from URL if present
@@ -1341,6 +1368,8 @@ export default function App() {
         setEditReminderEnabled(existing?.reminder?.enabled || false);
         setEditReminderType(existing?.reminder?.type || "email");
         setEditReminderTime(existing?.reminder?.time || existing?.appointmentTime || "09:00");
+        setEditReminderTiming(existing?.reminder?.timing || "48h");
+        setEditReminderEmailInput(existing?.reminder?.emailTo || notificationEmail || "");
       }
       
       return newSelection;
@@ -3527,36 +3556,75 @@ export default function App() {
                 </div>
 
                 {editReminderEnabled && (
-                  <div className="flex gap-4 items-end bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <div className="flex-1">
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Méthode
+                  <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                          Méthode de rappel
+                        </label>
+                        <select
+                          value={editReminderType}
+                          onChange={(e) =>
+                            setEditReminderType(
+                              e.target.value as "email" | "in-app" | "sms",
+                            )
+                          }
+                          className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
+                        >
+                          <option value="email">Email automatique</option>
+                          <option value="in-app">Alerte In-App</option>
+                          <option value="sms">SMS</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                          Heure du rappel
+                        </label>
+                        <input
+                          type="time"
+                          value={editReminderTime}
+                          onChange={(e) => setEditReminderTime(e.target.value)}
+                          className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                        <span>Délai de rappel</span>
+                        <span className="text-[11px] text-[#10a37f] font-bold">Rappel 48h recommandé</span>
                       </label>
                       <select
-                        value={editReminderType}
-                        onChange={(e) =>
-                          setEditReminderType(
-                            e.target.value as "email" | "in-app",
-                          )
-                        }
-                        className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
+                        value={editReminderTiming}
+                        onChange={(e) => setEditReminderTiming(e.target.value as "48h" | "24h" | "same-day")}
+                        className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white font-medium text-slate-800"
                       >
-                        <option value="in-app">Alerte in-app</option>
-                        <option value="email">Email</option>
-                        <option value="sms">SMS</option>
+                        <option value="48h">⚡ Rappel 48 heures avant la date (2 jours avant)</option>
+                        <option value="24h">🔔 Rappel 24 heures avant la date (1 jour avant)</option>
+                        <option value="same-day">📅 Le jour même de la date</option>
                       </select>
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Heure du rappel
-                      </label>
-                      <input
-                        type="time"
-                        value={editReminderTime}
-                        onChange={(e) => setEditReminderTime(e.target.value)}
-                        className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white font-mono"
-                      />
-                    </div>
+
+                    {editReminderType === "email" && (
+                      <div className="pt-2 border-t border-slate-200/60">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                          Adresse Email destinataire
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="email"
+                            value={editReminderEmailInput}
+                            onChange={(e) => setEditReminderEmailInput(e.target.value)}
+                            placeholder="votre.email@exemple.com"
+                            className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 pl-9 pr-3 border text-sm outline-none transition-all bg-white font-mono text-slate-800"
+                          />
+                          <Mail className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                          Un e-mail de confirmation sera automatiquement envoyé immédiatement à cette adresse lors de la sauvegarde de la note, et le rappel automatique 48h sera programmé.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -3572,10 +3640,18 @@ export default function App() {
                 Annuler
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour enregistrer des modifications sur le planning.")) {
                     return;
                   }
+
+                  const targetEmail = editReminderEmailInput.trim() || notificationEmail.trim();
+
+                  if (targetEmail && targetEmail !== notificationEmail) {
+                    setNotificationEmail(targetEmail);
+                    localStorage.setItem("planmastergo_email", targetEmail);
+                  }
+
                   setOverrides((prev) => {
                     const next = { ...prev };
                     selectedDates.forEach((date) => {
@@ -3588,12 +3664,77 @@ export default function App() {
                               enabled: true,
                               type: editReminderType,
                               time: editReminderTime || editAppointmentTime || "09:00",
+                              timing: editReminderTiming,
+                              emailTo: targetEmail,
                             }
                           : undefined,
                       };
                     });
                     return next;
                   });
+
+                  if (editReminderEnabled && editReminderType === "email") {
+                    if (!targetEmail) {
+                      alert("Veuillez saisir une adresse email pour l'envoi de la notification automatique.");
+                    } else {
+                      const datesFormatted = selectedDates.map(d => d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })).join(", ");
+                      const timingLabel = editReminderTiming === "48h" ? "48 heures avant la date (2 jours avant)" : editReminderTiming === "24h" ? "24 heures avant la date" : "Le jour même";
+
+                      const emailBody = `Bonjour,\n\nVotre note et rappel PlanMasterGO ont été enregistrés avec succès !\n\n📅 Date(s) concernée(s) : ${datesFormatted}\n📝 Note / Détails : ${editNote || "Aucune note saisie"}\n⏰ Heure : ${editAppointmentTime || "Non précisée"}\n⚡ Rappel automatique : ${timingLabel} à ${editReminderTime || "09:00"}\n\nL'email de rappel vous sera délivré à l'échéance programmée à l'adresse : ${targetEmail}.\n\nCordialement,\nL'équipe PlanMasterGO`;
+
+                      try {
+                        const res = await fetch("/api/notify", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            type: "email",
+                            to: targetEmail,
+                            message: emailBody,
+                          }),
+                        });
+
+                        const text = await res.text();
+                        let data: any = {};
+                        try { data = JSON.parse(text); } catch (e) {}
+
+                        if (res.ok) {
+                          setActiveToast({
+                            id: "auto-mail-" + Date.now(),
+                            title: `Notification Email (${editReminderTiming === "48h" ? "Rappel 48h" : "Rappel"}) Activée`,
+                            subtitle: `Un mail de confirmation a été envoyé à ${targetEmail} pour la note du ${datesFormatted}.`,
+                            type: "email",
+                          });
+
+                          if (data.simulated) {
+                            setSimulatedNotification({
+                              type: "email",
+                              to: targetEmail,
+                              message: emailBody,
+                              info: data.info || "Notification automatique simulée avec succès.",
+                            });
+                          }
+                        } else {
+                          setActiveToast({
+                            id: "auto-mail-err-" + Date.now(),
+                            title: "Erreur Notification Email",
+                            subtitle: data.error || "Impossible d'envoyer le mail automatique.",
+                            type: "in-app",
+                          });
+                        }
+                      } catch (err: any) {
+                        console.error("Erreur envoi email automatique:", err);
+                      }
+                    }
+                  } else if (editReminderEnabled) {
+                    const datesFormatted = selectedDates.map(d => d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })).join(", ");
+                    setActiveToast({
+                      id: "auto-reminder-" + Date.now(),
+                      title: `Rappel ${editReminderTiming === "48h" ? "48h" : editReminderTiming} enregistré`,
+                      subtitle: `Rappel activé pour le ${datesFormatted} à ${editReminderTime}.`,
+                      type: editReminderType,
+                    });
+                  }
+
                   setIsModalOpen(false);
                   setSelectedDates([]);
                 }}
@@ -4053,7 +4194,7 @@ export default function App() {
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3 text-emerald-900">
                     <Download className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                     <div>
-                      <h3 className="font-bold text-base">Étape 1 : Exporter le projet depuis Google AI Studio</h3>
+                      <h3 className="font-bold text-base">Étape 1 : Exporter le projet</h3>
                       <p className="text-xs sm:text-sm text-emerald-800 mt-1">
                         Vous pouvez exporter la totalité du code source sous forme de fichier ZIP ou le synchroniser directement sur votre compte GitHub.
                       </p>
@@ -4067,7 +4208,7 @@ export default function App() {
                         <span>Option A : Télécharger le ZIP</span>
                       </div>
                       <p className="text-xs text-slate-600">
-                        1. Cliquez sur le menu de paramètres en haut à droite de Google AI Studio.<br />
+                        1. Cliquez sur le menu de paramètres en haut à droite.<br />
                         2. Sélectionnez <strong>"Download ZIP"</strong> ou <strong>"Export ZIP"</strong>.<br />
                         3. Extrayez l'archive `.zip` sur votre ordinateur.
                       </p>
@@ -4079,7 +4220,7 @@ export default function App() {
                         <span>Option B : Synchroniser avec GitHub</span>
                       </div>
                       <p className="text-xs text-slate-600">
-                        1. Dans le menu AI Studio, choisissez <strong>"Export to GitHub"</strong>.<br />
+                        1. Dans le menu de l'application, choisissez <strong>"Export to GitHub"</strong>.<br />
                         2. Connectez votre compte GitHub pour créer un nouveau dépôt privé ou public.<br />
                         3. Récupérez le repo avec `git clone &lt;votre-url-github&gt;`.
                       </p>
