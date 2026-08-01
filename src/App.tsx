@@ -54,6 +54,7 @@ import {
   Zap,
   BellRing,
   Sun,
+  BarChart3,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -63,6 +64,7 @@ import { db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
 import { VacationCalendarModal } from "./components/VacationCalendarModal";
+import { DashboardModal } from "./components/DashboardModal";
 import { getSchoolHolidayForDate, VacationZone } from "./data/vacations";
 
 // Custom Floppy Disk Logo SVG based on user image
@@ -331,6 +333,7 @@ export default function App() {
 
   // Vacation / School Holiday Calendar State
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false);
+  const [isDashboardModalOpen, setIsDashboardModalOpen] = useState(false);
   const [vacationHighlightZone, setVacationHighlightZone] = useState<VacationZone>(() => {
     return (localStorage.getItem("planmastergo_vacation_zone") as VacationZone) || "zoneA";
   });
@@ -2204,6 +2207,16 @@ export default function App() {
                     <button
                       onClick={() => {
                         setIsGestionMenuOpen(false);
+                        setIsDashboardModalOpen(true);
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                    >
+                      <BarChart3 className="w-4 h-4 text-sky-500" />
+                      Tableau de Bord
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsGestionMenuOpen(false);
                         setIsVacationModalOpen(true);
                       }}
                       className="flex items-center gap-2.5 px-4 py-2 hover:bg-amber-50/80 text-amber-900 text-sm font-semibold transition-colors text-left"
@@ -3928,10 +3941,6 @@ export default function App() {
               </button>
               <button
                 onClick={async () => {
-                  if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour enregistrer des modifications sur le planning.")) {
-                    return;
-                  }
-
                   const targetEmail = editReminderEmailInput.trim() || notificationEmail.trim();
                   const targetPhone = editReminderPhoneInput.trim() || notificationPhone.trim();
 
@@ -4921,6 +4930,13 @@ export default function App() {
         onSelectHighlightZone={handleSelectVacationZone}
         showSchoolHolidaysOnGrid={showSchoolHolidaysOnGrid}
         onToggleSchoolHolidaysOnGrid={handleToggleSchoolHolidaysOnGrid}
+      />
+
+      <DashboardModal
+        isOpen={isDashboardModalOpen}
+        onClose={() => setIsDashboardModalOpen(false)}
+        year={year}
+        getDayState={getDayState}
       />
 
     </div>
