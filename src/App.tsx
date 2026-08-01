@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
+  Search,
   ChevronLeft,
   ChevronRight,
   Share2,
@@ -32,6 +33,7 @@ import {
   Unlock,
   Shield,
   Smartphone,
+  Phone,
   Clock,
   Calendar,
   Eye,
@@ -49,6 +51,8 @@ import {
   ShieldCheck,
   EyeOff,
   LogOut,
+  Zap,
+  BellRing,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -109,8 +113,9 @@ interface CustomDayRecord {
     enabled: boolean;
     type: "in-app" | "email" | "sms";
     time: string;
-    timing?: "48h" | "24h" | "same-day";
+    timing?: "7d" | "48h" | "24h" | "same-day";
     emailTo?: string;
+    phoneTo?: string;
   };
 }
 type CustomOverrides = Record<string, CustomDayRecord>;
@@ -233,6 +238,7 @@ export default function App() {
   const [viewDate, setViewDate] = useState<Date>(new Date());
   type ViewMode = "annual" | "month";
   const [viewMode, setViewMode] = useState<ViewMode>("month");
+  const [annualSearchQuery, setAnnualSearchQuery] = useState<string>("");
   const year = viewDate.getFullYear();
 
   const [overrides, setOverrides] = useState<CustomOverrides>(() => {
@@ -246,6 +252,21 @@ export default function App() {
     }
     return {};
   });
+
+  const matchingSearchDaysCount = React.useMemo(() => {
+    const query = annualSearchQuery.toLowerCase().trim();
+    if (!query) return 0;
+    let count = 0;
+    (Object.entries(overrides) as [string, CustomDayRecord][]).forEach(([key, record]) => {
+      if (record?.note && record.note.toLowerCase().includes(query)) {
+        const parts = key.split("-");
+        if (parts.length === 3 && Number(parts[0]) === year) {
+          count++;
+        }
+      }
+    });
+    return count;
+  }, [annualSearchQuery, overrides, year]);
 
   const isFirstMountOverrides = useRef(true);
   useEffect(() => {
@@ -268,8 +289,9 @@ export default function App() {
     "email",
   );
   const [editReminderTime, setEditReminderTime] = useState("09:00");
-  const [editReminderTiming, setEditReminderTiming] = useState<"48h" | "24h" | "same-day">("48h");
+  const [editReminderTiming, setEditReminderTiming] = useState<"7d" | "48h" | "24h" | "same-day">("48h");
   const [editReminderEmailInput, setEditReminderEmailInput] = useState<string>("");
+  const [editReminderPhoneInput, setEditReminderPhoneInput] = useState<string>("");
 
   // Share Modal State
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -924,7 +946,7 @@ export default function App() {
     const currentMin = String(currentTime.getMinutes()).padStart(2, "0");
     const timeStr = `${currentHour}:${currentMin}`;
 
-    Object.entries(overrides).forEach(([eventDateKey, dayData]) => {
+    (Object.entries(overrides) as [string, CustomDayRecord][]).forEach(([eventDateKey, dayData]) => {
       if (!dayData?.reminder?.enabled) return;
 
       const timing = dayData.reminder.timing || "same-day";
@@ -933,7 +955,9 @@ export default function App() {
       const eventDateObj = new Date(parts[0], parts[1] - 1, parts[2]);
 
       const triggerDateObj = new Date(eventDateObj);
-      if (timing === "48h") {
+      if (timing === "7d") {
+        triggerDateObj.setDate(triggerDateObj.getDate() - 7);
+      } else if (timing === "48h") {
         triggerDateObj.setDate(triggerDateObj.getDate() - 2);
       } else if (timing === "24h") {
         triggerDateObj.setDate(triggerDateObj.getDate() - 1);
@@ -944,7 +968,7 @@ export default function App() {
       if (todayKey === triggerDateKey && dayData.reminder.time === timeStr) {
         const reminderId = `${eventDateKey}-${timing}-${timeStr}`;
         if (!triggeredReminders.has(reminderId)) {
-          const timingTitle = timing === "48h" ? "Rappel 48h avant" : timing === "24h" ? "Rappel 24h avant" : "Rappel aujourd'hui";
+          const timingTitle = timing === "7d" ? "Rappel 7 jours avant" : timing === "48h" ? "Rappel 48h avant" : timing === "24h" ? "Rappel 24h avant" : "Rappel aujourd'hui";
           const eventDateFormatted = eventDateObj.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
           setActiveToast({
@@ -989,12 +1013,14 @@ export default function App() {
             }).catch(console.error);
           }
 
-          if (dayData.reminder.type === "sms" && notificationPhone) {
+          const targetPhone = dayData.reminder.phoneTo || notificationPhone;
+
+          if (dayData.reminder.type === "sms" && targetPhone) {
             const smsMessage = `PlanMasterGO - ${timingTitle} (${eventDateFormatted}): ${dayData.note || "Rappel"}`;
             fetch("/api/notify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: "sms", to: notificationPhone, message: smsMessage })
+              body: JSON.stringify({ type: "sms", to: targetPhone, message: smsMessage })
             }).then(async res => {
               const text = await res.text();
               let data: any = {};
@@ -1010,7 +1036,7 @@ export default function App() {
               } else if (data.simulated) {
                 setSimulatedNotification({
                   type: "sms",
-                  to: notificationPhone,
+                  to: targetPhone,
                   message: smsMessage,
                   info: data.info || ""
                 });
@@ -1370,6 +1396,7 @@ export default function App() {
         setEditReminderTime(existing?.reminder?.time || existing?.appointmentTime || "09:00");
         setEditReminderTiming(existing?.reminder?.timing || "48h");
         setEditReminderEmailInput(existing?.reminder?.emailTo || notificationEmail || "");
+        setEditReminderPhoneInput(existing?.reminder?.phoneTo || notificationPhone || "");
       }
       
       return newSelection;
@@ -1391,6 +1418,10 @@ export default function App() {
     const days = [];
     let workCount = 0;
     let restCount = 0;
+    let monthMatchCount = 0;
+
+    const searchTrim = annualSearchQuery.toLowerCase().trim();
+    const isSearchActive = viewMode === "annual" && searchTrim.length > 0;
 
     const emptyCellClass = isLarge
       ? "mx-auto w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12"
@@ -1420,11 +1451,17 @@ export default function App() {
 
       const today = isToday(currentDate);
       const key = getDateKey(currentDate);
-      const hasNote = !!overrides[key]?.note;
+      const noteText = overrides[key]?.note || "";
+      const hasNote = !!noteText;
       const hasReminder = overrides[key]?.reminder?.enabled;
       const holidayName = showFrenchHolidays ? frenchHolidays[key] : null;
 
-      let baseClasses = `mx-auto flex items-center justify-center rounded-full font-semibold transition-colors relative cursor-pointer group-hover:opacity-80 ${isLarge ? "w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 text-sm sm:text-base md:text-lg" : "w-7 h-7 sm:w-8 sm:h-8 text-xs sm:text-sm"}`;
+      const isSearchMatch = isSearchActive && noteText.toLowerCase().includes(searchTrim);
+      if (isSearchMatch) {
+        monthMatchCount++;
+      }
+
+      let baseClasses = `mx-auto flex items-center justify-center rounded-full font-semibold transition-all relative cursor-pointer group-hover:opacity-80 ${isLarge ? "w-8 h-8 min-[360px]:w-9 min-[360px]:h-9 sm:w-10 sm:h-10 md:w-12 md:h-12 text-sm sm:text-base md:text-lg" : "w-7 h-7 sm:w-8 sm:h-8 text-xs sm:text-sm"}`;
       let stateClasses = "";
 
       if (state === "work") {
@@ -1465,6 +1502,10 @@ export default function App() {
         stateClasses += " ring-4 ring-[#10a37f] ring-offset-2 ring-offset-white";
       }
 
+      if (isSearchActive && isSearchMatch) {
+        stateClasses += " ring-4 ring-blue-500 ring-offset-2 ring-offset-white animate-pulse shadow-lg shadow-blue-500/40 z-20 font-black";
+      }
+
       let stateLabel = "";
       let dotColor = "transparent";
       if (state === "work") { stateLabel = "Travail"; dotColor = "#fde047"; }
@@ -1476,24 +1517,38 @@ export default function App() {
       else if (state === "6thday") { stateLabel = "6ème Jour"; dotColor = "#34C924"; }
       else if (state === "children") { stateLabel = "Enfant malade"; dotColor = "#400732"; }
 
+      let wrapperClasses = "flex justify-center items-center relative group transition-all duration-300";
+      if (isSearchActive) {
+        if (isSearchMatch) {
+          wrapperClasses += " z-20 opacity-100 scale-110";
+        } else {
+          wrapperClasses += " opacity-25 grayscale-[30%]";
+        }
+      }
+
       days.push(
         <motion.div
           key={key}
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.3, delay: Math.min(d * 0.01, 0.3), ease: "easeOut" }}
-          className="flex justify-center items-center relative group"
+          className={wrapperClasses}
         >
           <motion.button
             onClick={() => handleDayClick(currentDate)}
             className={`${baseClasses} ${stateClasses}`}
-            animate={{ scale: isSelectedMulti && !pdfMode ? 1.15 : 1 }}
+            animate={{ scale: isSelectedMulti && !pdfMode ? 1.15 : isSearchMatch ? 1.2 : 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 25 }}
             whileHover={{ scale: 1.12, y: -2 }}
             whileTap={{ scale: 0.95 }}
           >
             {d}
-            {hasNote && (
+            {isSearchMatch && (
+              <span className="absolute -top-1 -left-1 bg-blue-600 text-white p-0.5 rounded-full shadow border border-white z-30 flex items-center justify-center">
+                <Search className="w-2.5 h-2.5" />
+              </span>
+            )}
+            {hasNote && !isSearchMatch && (
               <span
                 className={`absolute bg-blue-500 rounded-full border-2 border-white ${isLarge ? "-top-1 -right-1 w-3 h-3" : "-top-1 -right-1 w-2.5 h-2.5"}`}
               ></span>
@@ -1541,7 +1596,7 @@ export default function App() {
                 </div>
               )}
               {hasNote && (
-                <div className="mt-0.5 text-slate-300 bg-slate-900/50 p-2 rounded border border-slate-700/50">
+                <div className={`mt-0.5 text-slate-300 bg-slate-900/50 p-2 rounded border ${isSearchMatch ? "border-blue-400 font-semibold text-blue-200" : "border-slate-700/50"}`}>
                   {overrides[key]?.note}
                 </div>
               )}
@@ -1574,13 +1629,18 @@ export default function App() {
       >
         <div>
           <h3
-            className={`text-center font-bold text-slate-800 ${
+            className={`text-center font-bold text-slate-800 flex items-center justify-center gap-2 ${
               isLarge
                 ? "text-lg sm:text-2xl mb-3 sm:mb-6"
                 : "text-sm mb-2 sm:mb-4 group-hover:text-[#10a37f] transition-colors"
             }`}
           >
-            {MONTHS[monthIndex]}
+            <span>{MONTHS[monthIndex]}</span>
+            {isSearchActive && monthMatchCount > 0 && (
+              <span className="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white shadow-sm animate-in zoom-in-95">
+                {monthMatchCount} {monthMatchCount === 1 ? "résultat" : "résultats"}
+              </span>
+            )}
           </h3>
           <div
             className={`grid grid-cols-7 ${isLarge ? "gap-y-1.5 sm:gap-y-4 gap-x-0.5 sm:gap-x-2" : "gap-y-1 gap-x-0.5"}`}
@@ -2528,18 +2588,60 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.26, ease: [0.4, 0, 0.2, 1] }}
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                className="space-y-6"
               >
-                {MONTHS.map((_, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: index * 0.012, ease: "easeOut" }}
-                  >
-                    {renderMonth(index)}
-                  </motion.div>
-                ))}
+                {/* Barre de recherche dynamique pour la vue annuelle */}
+                <div className="bg-white/90 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-slate-200/90 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center gap-3 justify-between">
+                  <div className="flex-1 relative flex items-center">
+                    <Search className="w-4.5 h-4.5 text-slate-400 absolute left-3.5 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={annualSearchQuery}
+                      onChange={(e) => setAnnualSearchQuery(e.target.value)}
+                      placeholder="Filtrer les jours par mot-clé dans leurs notes (ex: médecin, formation, urgent, RDV)..."
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl py-2 sm:py-2.5 pl-10 pr-9 text-xs sm:text-sm text-slate-800 placeholder:text-slate-400 font-medium outline-none transition-all shadow-inner"
+                    />
+                    {annualSearchQuery && (
+                      <button
+                        onClick={() => setAnnualSearchQuery("")}
+                        className="absolute right-3 p-1 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                        title="Effacer la recherche"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {annualSearchQuery.trim() !== "" && (
+                    <div className="flex items-center gap-2 px-3.5 py-2 bg-blue-50 text-blue-900 border border-blue-200/90 rounded-xl text-xs sm:text-sm font-semibold shrink-0 animate-in fade-in zoom-in-95">
+                      <span className="relative flex h-2.5 w-2.5">
+                        {matchingSearchDaysCount > 0 && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${matchingSearchDaysCount > 0 ? "bg-blue-600" : "bg-slate-400"}`}></span>
+                      </span>
+                      <span>
+                        {matchingSearchDaysCount === 0
+                          ? "Aucun jour trouvé"
+                          : `${matchingSearchDaysCount} jour${matchingSearchDaysCount > 1 ? "s" : ""} trouvé${matchingSearchDaysCount > 1 ? "s" : ""}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Grille des 12 mois */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {MONTHS.map((_, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: index * 0.012, ease: "easeOut" }}
+                    >
+                      {renderMonth(index)}
+                    </motion.div>
+                  ))}
+                </div>
               </motion.div>
             ) : (
               <motion.div
@@ -3123,46 +3225,73 @@ export default function App() {
 
             <div className="p-6">
               {activeSettingsTab === "notifications" ? (
-                <div className="space-y-4">
-                  <div>
+                <div className="space-y-5">
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
                     <div className="flex justify-between items-center mb-1.5">
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Adresse Email</label>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Mail className="w-4 h-4 text-[#10a37f]" />
+                        Adresse Email pour rappels
+                      </label>
                       <button 
                         onClick={() => handleTestNotification('email')}
                         disabled={!notificationEmail || isTestingNotification}
-                        className="text-[10px] bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 px-2 py-1 rounded font-medium transition-colors"
+                        className="text-[11px] bg-[#10a37f]/10 hover:bg-[#10a37f]/20 disabled:opacity-50 text-[#10a37f] px-2.5 py-1 rounded-lg font-bold transition-colors"
                       >
-                        {isTestingNotification ? "Test..." : "Tester"}
+                        {isTestingNotification ? "Envoi..." : "Tester Email"}
                       </button>
                     </div>
                     <input
                       type="email"
                       value={notificationEmail}
-                      onChange={(e) => setNotificationEmail(e.target.value)}
+                      onChange={(e) => {
+                        setNotificationEmail(e.target.value);
+                        localStorage.setItem("planmastergo_email", e.target.value);
+                      }}
                       placeholder="votre@email.com"
-                      className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
+                      className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white font-mono text-slate-800"
                     />
                   </div>
-                  <div>
+
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
                     <div className="flex justify-between items-center mb-1.5">
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Numéro de téléphone (SMS)</label>
+                      <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                        <Phone className="w-4 h-4 text-sky-600" />
+                        Numéro SMS (Twilio Integration)
+                      </label>
                       <button 
                         onClick={() => handleTestNotification('sms')}
                         disabled={!notificationPhone || isTestingNotification}
-                        className="text-[10px] bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 px-2 py-1 rounded font-medium transition-colors"
+                        className="text-[11px] bg-sky-100 hover:bg-sky-200 disabled:opacity-50 text-sky-800 px-2.5 py-1 rounded-lg font-bold transition-colors"
                       >
-                        {isTestingNotification ? "Test..." : "Tester"}
+                        {isTestingNotification ? "Envoi..." : "Tester SMS Twilio"}
                       </button>
                     </div>
                     <input
                       type="tel"
                       value={notificationPhone}
-                      onChange={(e) => setNotificationPhone(e.target.value)}
+                      onChange={(e) => {
+                        setNotificationPhone(e.target.value);
+                        localStorage.setItem("planmastergo_phone", e.target.value);
+                      }}
                       placeholder="+33612345678"
-                      className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white"
+                      className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white font-mono text-slate-800"
                     />
                   </div>
-                  <p className="text-xs text-slate-500">Ces informations reçoivent vos rappels de planning configurés (in-app, email ou SMS).</p>
+
+                  <div className="p-3.5 bg-sky-50/70 border border-sky-200 rounded-xl space-y-2 text-xs text-sky-900">
+                    <div className="flex items-center gap-2 font-bold text-sky-800">
+                      <Smartphone className="w-4 h-4 text-sky-600" />
+                      <span>Intégration SMS Twilio & Email Automatique</span>
+                    </div>
+                    <p className="leading-relaxed">
+                      L'application supporte les notifications en direct via <strong>Twilio</strong> pour les SMS et <strong>SMTP</strong> pour les e-mails.
+                    </p>
+                    <p className="leading-relaxed text-[11px] text-sky-800/90">
+                      • Pour activer l'envoi réel de SMS Twilio, configurez les variables <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code> et <code>TWILIO_PHONE_NUMBER</code> dans les paramètres d'environnement de l'application.
+                      <br />
+                      • En l'absence de clés d'API, le mode <strong>Simulation Twilio</strong> affiche automatiquement un pop-up d'alerte SMS à l'écran avec le texte exact du message.
+                    </p>
+                  </div>
                 </div>
               ) : activeSettingsTab === "sync" ? (
                 <div className="space-y-4 animate-in fade-in duration-150">
@@ -3590,19 +3719,87 @@ export default function App() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                        <span>Délai de rappel</span>
-                        <span className="text-[11px] text-[#10a37f] font-bold">Rappel 48h recommandé</span>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-slate-700">
+                          <Clock className="w-4 h-4 text-[#10a37f]" />
+                          Délai de rappel
+                        </span>
+                        {editReminderTiming === "48h" && (
+                          <span className="text-[11px] bg-[#10a37f]/10 text-[#10a37f] font-bold px-2 py-0.5 rounded-full">
+                            Recommandé (48h)
+                          </span>
+                        )}
                       </label>
-                      <select
-                        value={editReminderTiming}
-                        onChange={(e) => setEditReminderTiming(e.target.value as "48h" | "24h" | "same-day")}
-                        className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 px-3 border text-sm outline-none transition-all bg-white font-medium text-slate-800"
-                      >
-                        <option value="48h">⚡ Rappel 48 heures avant la date (2 jours avant)</option>
-                        <option value="24h">🔔 Rappel 24 heures avant la date (1 jour avant)</option>
-                        <option value="same-day">📅 Le jour même de la date</option>
-                      </select>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[
+                          {
+                            id: "7d",
+                            label: "7 jours avant",
+                            desc: "1 semaine en avance",
+                            icon: CalendarDays,
+                            badge: "7j",
+                          },
+                          {
+                            id: "48h",
+                            label: "48 heures avant",
+                            desc: "2 jours en avance",
+                            icon: Zap,
+                            badge: "48h",
+                          },
+                          {
+                            id: "24h",
+                            label: "24 heures avant",
+                            desc: "La veille de la date",
+                            icon: BellRing,
+                            badge: "24h",
+                          },
+                          {
+                            id: "same-day",
+                            label: "Le jour même",
+                            desc: "À l'heure exacte fixée",
+                            icon: Clock,
+                            badge: "Jour J",
+                          },
+                        ].map((item) => {
+                          const isSelected = editReminderTiming === item.id;
+                          const IconComp = item.icon;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setEditReminderTiming(item.id as "7d" | "48h" | "24h" | "same-day")}
+                              className={`p-2.5 rounded-xl border text-left transition-all flex items-center gap-3 relative cursor-pointer ${
+                                isSelected
+                                  ? "border-[#10a37f] bg-[#10a37f]/10 shadow-xs ring-1 ring-[#10a37f]"
+                                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80"
+                              }`}
+                            >
+                              <div
+                                className={`p-2 rounded-lg shrink-0 transition-colors ${
+                                  isSelected
+                                    ? "bg-[#10a37f] text-white"
+                                    : "bg-slate-100 text-slate-500"
+                                }`}
+                              >
+                                <IconComp className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className={`text-xs font-bold leading-tight ${isSelected ? "text-[#10a37f]" : "text-slate-800"}`}>
+                                    {item.label}
+                                  </span>
+                                  {isSelected && (
+                                    <Check className="w-3.5 h-3.5 text-[#10a37f] shrink-0" />
+                                  )}
+                                </div>
+                                <span className="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                                  {item.desc}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {editReminderType === "email" && (
@@ -3621,7 +3818,29 @@ export default function App() {
                           <Mail className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
                         </div>
                         <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
-                          Un e-mail de confirmation sera automatiquement envoyé immédiatement à cette adresse lors de la sauvegarde de la note, et le rappel automatique 48h sera programmé.
+                          Un e-mail de confirmation sera automatiquement envoyé immédiatement à cette adresse lors de la sauvegarde de la note, et le rappel automatique ({editReminderTiming === "7d" ? "7 jours avant" : editReminderTiming === "48h" ? "48h avant" : editReminderTiming === "24h" ? "24h avant" : "le jour même"}) sera programmé.
+                        </p>
+                      </div>
+                    )}
+
+                    {editReminderType === "sms" && (
+                      <div className="pt-2 border-t border-slate-200/60">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                          <span>Numéro SMS (Twilio)</span>
+                          <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full">Twilio SMS</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="tel"
+                            value={editReminderPhoneInput}
+                            onChange={(e) => setEditReminderPhoneInput(e.target.value)}
+                            placeholder="+33612345678"
+                            className="w-full border-slate-200 rounded-lg shadow-sm focus:border-[#10a37f] focus:ring focus:ring-[#10a37f]/20 py-2 pl-9 pr-3 border text-sm outline-none transition-all bg-white font-mono text-slate-800"
+                          />
+                          <Phone className="w-4 h-4 text-slate-400 absolute left-2.5 top-2.5" />
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                          Un SMS de confirmation Twilio sera envoyé immédiatement à ce numéro lors de la sauvegarde, et le rappel automatique ({editReminderTiming === "7d" ? "7 jours avant" : editReminderTiming === "48h" ? "48h avant" : editReminderTiming === "24h" ? "24h avant" : "le jour même"}) sera programmé.
                         </p>
                       </div>
                     )}
@@ -3646,10 +3865,15 @@ export default function App() {
                   }
 
                   const targetEmail = editReminderEmailInput.trim() || notificationEmail.trim();
+                  const targetPhone = editReminderPhoneInput.trim() || notificationPhone.trim();
 
                   if (targetEmail && targetEmail !== notificationEmail) {
                     setNotificationEmail(targetEmail);
                     localStorage.setItem("planmastergo_email", targetEmail);
+                  }
+                  if (targetPhone && targetPhone !== notificationPhone) {
+                    setNotificationPhone(targetPhone);
+                    localStorage.setItem("planmastergo_phone", targetPhone);
                   }
 
                   setOverrides((prev) => {
@@ -3666,6 +3890,7 @@ export default function App() {
                               time: editReminderTime || editAppointmentTime || "09:00",
                               timing: editReminderTiming,
                               emailTo: targetEmail,
+                              phoneTo: targetPhone,
                             }
                           : undefined,
                       };
@@ -3678,7 +3903,7 @@ export default function App() {
                       alert("Veuillez saisir une adresse email pour l'envoi de la notification automatique.");
                     } else {
                       const datesFormatted = selectedDates.map(d => d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })).join(", ");
-                      const timingLabel = editReminderTiming === "48h" ? "48 heures avant la date (2 jours avant)" : editReminderTiming === "24h" ? "24 heures avant la date" : "Le jour même";
+                      const timingLabel = editReminderTiming === "7d" ? "7 jours avant la date" : editReminderTiming === "48h" ? "48 heures avant la date (2 jours avant)" : editReminderTiming === "24h" ? "24 heures avant la date" : "Le jour même";
 
                       const emailBody = `Bonjour,\n\nVotre note et rappel PlanMasterGO ont été enregistrés avec succès !\n\n📅 Date(s) concernée(s) : ${datesFormatted}\n📝 Note / Détails : ${editNote || "Aucune note saisie"}\n⏰ Heure : ${editAppointmentTime || "Non précisée"}\n⚡ Rappel automatique : ${timingLabel} à ${editReminderTime || "09:00"}\n\nL'email de rappel vous sera délivré à l'échéance programmée à l'adresse : ${targetEmail}.\n\nCordialement,\nL'équipe PlanMasterGO`;
 
@@ -3700,7 +3925,7 @@ export default function App() {
                         if (res.ok) {
                           setActiveToast({
                             id: "auto-mail-" + Date.now(),
-                            title: `Notification Email (${editReminderTiming === "48h" ? "Rappel 48h" : "Rappel"}) Activée`,
+                            title: `Notification Email (${editReminderTiming === "7d" ? "Rappel 7 jours" : editReminderTiming === "48h" ? "Rappel 48h" : "Rappel"}) Activée`,
                             subtitle: `Un mail de confirmation a été envoyé à ${targetEmail} pour la note du ${datesFormatted}.`,
                             type: "email",
                           });
@@ -3725,11 +3950,62 @@ export default function App() {
                         console.error("Erreur envoi email automatique:", err);
                       }
                     }
+                  } else if (editReminderEnabled && editReminderType === "sms") {
+                    if (!targetPhone) {
+                      alert("Veuillez saisir un numéro de téléphone pour l'envoi du SMS Twilio.");
+                    } else {
+                      const datesFormatted = selectedDates.map(d => d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })).join(", ");
+                      const timingLabel = editReminderTiming === "7d" ? "7j avant" : editReminderTiming === "48h" ? "48h avant" : editReminderTiming === "24h" ? "24h avant" : "le jour même";
+                      const smsBody = `PlanMasterGO: Rappel programmé pour le ${datesFormatted} (${timingLabel} à ${editReminderTime || "09:00"}). Note: ${editNote || "Rendez-vous"}`;
+
+                      try {
+                        const res = await fetch("/api/notify", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            type: "sms",
+                            to: targetPhone,
+                            message: smsBody,
+                          }),
+                        });
+
+                        const text = await res.text();
+                        let data: any = {};
+                        try { data = JSON.parse(text); } catch (e) {}
+
+                        if (res.ok) {
+                          setActiveToast({
+                            id: "auto-sms-" + Date.now(),
+                            title: `Notification SMS Twilio (${editReminderTiming === "7d" ? "Rappel 7 jours" : editReminderTiming === "48h" ? "Rappel 48h" : "Rappel"}) Activée`,
+                            subtitle: `Un SMS de confirmation a été envoyé à ${targetPhone}.`,
+                            type: "sms",
+                          });
+
+                          if (data.simulated) {
+                            setSimulatedNotification({
+                              type: "sms",
+                              to: targetPhone,
+                              message: smsBody,
+                              info: data.info || "Notification SMS Twilio simulée. Pour de vrais SMS, configurez TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN et TWILIO_PHONE_NUMBER dans les Secrets.",
+                            });
+                          }
+                        } else {
+                          setActiveToast({
+                            id: "auto-sms-err-" + Date.now(),
+                            title: "Erreur SMS Twilio",
+                            subtitle: data.error || "Impossible d'envoyer le SMS.",
+                            type: "in-app",
+                          });
+                        }
+                      } catch (err: any) {
+                        console.error("Erreur envoi SMS Twilio:", err);
+                      }
+                    }
                   } else if (editReminderEnabled) {
                     const datesFormatted = selectedDates.map(d => d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })).join(", ");
                     setActiveToast({
                       id: "auto-reminder-" + Date.now(),
-                      title: `Rappel ${editReminderTiming === "48h" ? "48h" : editReminderTiming} enregistré`,
+                      title: `Rappel ${editReminderTiming === "7d" ? "7 jours" : editReminderTiming === "48h" ? "48h" : editReminderTiming} enregistré`,
                       subtitle: `Rappel activé pour le ${datesFormatted} à ${editReminderTime}.`,
                       type: editReminderType,
                     });
