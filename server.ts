@@ -13,15 +13,15 @@ app.use(express.json());
 const PORT = 3000;
 
 // Example: POST /api/notify
-// Body: { type: 'sms' | 'email', to: string, message: string }
+// Body: { type: 'sms' | 'email', to: string, message: string, smtpConfig?: object, twilioConfig?: object }
 app.post("/api/notify", async (req, res) => {
-  const { type, to, message } = req.body;
+  const { type, to, message, smtpConfig, twilioConfig } = req.body;
 
   try {
     if (type === "sms") {
-      const accountSid = process.env.TWILIO_ACCOUNT_SID;
-      const authToken = process.env.TWILIO_AUTH_TOKEN;
-      const fromPhone = process.env.TWILIO_PHONE_NUMBER;
+      const accountSid = twilioConfig?.accountSid || process.env.TWILIO_ACCOUNT_SID;
+      const authToken = twilioConfig?.authToken || process.env.TWILIO_AUTH_TOKEN;
+      const fromPhone = twilioConfig?.fromPhone || process.env.TWILIO_PHONE_NUMBER;
 
       if (!accountSid || !authToken || !fromPhone) {
          return res.json({ 
@@ -30,7 +30,7 @@ app.post("/api/notify", async (req, res) => {
            type: "sms", 
            to, 
            message,
-           info: "Pour de vrais envois de SMS, configurez les variables d'environnement TWILIO_* (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER) dans les Secrets des paramètres de l'application." 
+           info: "Pour de vrais envois de SMS, renseignez vos identifiants Twilio dans les Paramètres > Notifications de l'application ou en variables d'environnement." 
          });
       }
       
@@ -42,11 +42,11 @@ app.post("/api/notify", async (req, res) => {
       });
       return res.json({ success: true, id: twilioRes.sid });
     } else if (type === "email") {
-      const host = process.env.SMTP_HOST;
-      const port = process.env.SMTP_PORT || "587";
-      const secure = process.env.SMTP_SECURE === "true";
-      const user = process.env.SMTP_USER;
-      const pass = process.env.SMTP_PASS;
+      const host = smtpConfig?.host || process.env.SMTP_HOST;
+      const port = smtpConfig?.port || process.env.SMTP_PORT || "587";
+      const secure = smtpConfig?.secure !== undefined ? Boolean(smtpConfig.secure) : (process.env.SMTP_SECURE === "true");
+      const user = smtpConfig?.user || process.env.SMTP_USER;
+      const pass = smtpConfig?.pass || process.env.SMTP_PASS;
 
       if (!host || !user || !pass) {
         return res.json({
@@ -55,13 +55,13 @@ app.post("/api/notify", async (req, res) => {
           type: "email",
           to,
           message,
-          info: "Pour de vrais envois d'emails, configurez les variables d'environnement SMTP_* (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) dans les Secrets des paramètres de l'application."
+          info: "Pour de vrais envois d'emails, renseignez vos paramètres SMTP (ex: Gmail, Brevo...) dans les Paramètres > Notifications de l'application ou en variables d'environnement."
         });
       }
 
       const transporter = nodemailer.createTransport({
         host: host,
-        port: parseInt(port),
+        port: parseInt(String(port)),
         secure: secure,
         auth: {
           user: user,

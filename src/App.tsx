@@ -374,6 +374,33 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState("voicebox155@gmail.com");
   const [notificationPhone, setNotificationPhone] = useState("");
+  
+  const [smtpHost, setSmtpHost] = useState(() => localStorage.getItem("planmastergo_smtp_host") || "");
+  const [smtpPort, setSmtpPort] = useState(() => localStorage.getItem("planmastergo_smtp_port") || "587");
+  const [smtpUser, setSmtpUser] = useState(() => localStorage.getItem("planmastergo_smtp_user") || "");
+  const [smtpPass, setSmtpPass] = useState(() => localStorage.getItem("planmastergo_smtp_pass") || "");
+  const [twilioSid, setTwilioSid] = useState(() => localStorage.getItem("planmastergo_twilio_sid") || "");
+  const [twilioToken, setTwilioToken] = useState(() => localStorage.getItem("planmastergo_twilio_token") || "");
+  const [twilioFrom, setTwilioFrom] = useState(() => localStorage.getItem("planmastergo_twilio_from") || "");
+
+  const getNotificationConfigs = () => {
+    const smtpConfig = (smtpHost && smtpUser && smtpPass) ? {
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === "465",
+      user: smtpUser,
+      pass: smtpPass
+    } : undefined;
+
+    const twilioConfig = (twilioSid && twilioToken && twilioFrom) ? {
+      accountSid: twilioSid,
+      authToken: twilioToken,
+      fromPhone: twilioFrom
+    } : undefined;
+
+    return { smtpConfig, twilioConfig };
+  };
+
   const [activeSettingsTab, setActiveSettingsTab] = useState<"notifications" | "sync" | "security" | "display">("notifications");
   const [showFrenchHolidays, setShowFrenchHolidays] = useState(false);
   const [frenchHolidays, setFrenchHolidays] = useState<Record<string, string>>({});
@@ -663,10 +690,11 @@ export default function App() {
         throw new Error(`Veuillez renseigner un ${type === 'email' ? 'email' : 'numéro de téléphone'}`);
       }
       
+      const configs = getNotificationConfigs();
       const res = await fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, to, message: "Ceci est un test de PlanMasterGO." })
+        body: JSON.stringify({ type, to, message: "Ceci est un test de PlanMasterGO.", ...configs })
       });
       
       let data;
@@ -730,6 +758,13 @@ export default function App() {
     localStorage.setItem("planmastergo_email", notificationEmail);
     localStorage.setItem("planmastergo_phone", notificationPhone);
     localStorage.setItem("planmastergo_pin", appPin);
+    localStorage.setItem("planmastergo_smtp_host", smtpHost);
+    localStorage.setItem("planmastergo_smtp_port", smtpPort);
+    localStorage.setItem("planmastergo_smtp_user", smtpUser);
+    localStorage.setItem("planmastergo_smtp_pass", smtpPass);
+    localStorage.setItem("planmastergo_twilio_sid", twilioSid);
+    localStorage.setItem("planmastergo_twilio_token", twilioToken);
+    localStorage.setItem("planmastergo_twilio_from", twilioFrom);
     localStorage.setItem("planmastergo_local_update_time", Date.now().toString());
 
     setSyncStatus("pending");
@@ -986,10 +1021,11 @@ export default function App() {
           if (dayData.reminder.type === "email" && targetEmail) {
             const emailMessage = `Bonjour,\n\nCeci est votre ${timingTitle.toLowerCase()} pour l'événement PlanMasterGO du ${eventDateFormatted}.\n\n📝 Note / Détails : ${dayData.note || "Aucune note"}\n⏰ Heure : ${dayData.appointmentTime || dayData.reminder.time}\n\nCordialement,\nL'équipe PlanMasterGO`;
 
+            const configs = getNotificationConfigs();
             fetch("/api/notify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: "email", to: targetEmail, message: emailMessage })
+              body: JSON.stringify({ type: "email", to: targetEmail, message: emailMessage, ...configs })
             }).then(async res => {
               const text = await res.text();
               let data: any = {};
@@ -1002,13 +1038,6 @@ export default function App() {
                   subtitle: data.error || "L'API backend est introuvable.",
                   type: "in-app"
                 });
-              } else if (data.simulated) {
-                setSimulatedNotification({
-                  type: "email",
-                  to: targetEmail,
-                  message: emailMessage,
-                  info: data.info || ""
-                });
               }
             }).catch(console.error);
           }
@@ -1017,10 +1046,11 @@ export default function App() {
 
           if (dayData.reminder.type === "sms" && targetPhone) {
             const smsMessage = `PlanMasterGO - ${timingTitle} (${eventDateFormatted}): ${dayData.note || "Rappel"}`;
+            const configs = getNotificationConfigs();
             fetch("/api/notify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: "sms", to: targetPhone, message: smsMessage })
+              body: JSON.stringify({ type: "sms", to: targetPhone, message: smsMessage, ...configs })
             }).then(async res => {
               const text = await res.text();
               let data: any = {};
@@ -1032,13 +1062,6 @@ export default function App() {
                   title: "Erreur SMS",
                   subtitle: data.error || "L'API backend est introuvable.",
                   type: "in-app"
-                });
-              } else if (data.simulated) {
-                setSimulatedNotification({
-                  type: "sms",
-                  to: targetPhone,
-                  message: smsMessage,
-                  info: data.info || ""
                 });
               }
             }).catch(console.error);
@@ -3278,18 +3301,136 @@ export default function App() {
                     />
                   </div>
 
+                  {/* Custom SMTP Configuration */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Mail className="w-4 h-4 text-[#10a37f]" />
+                        Serveur Email SMTP (Gmail, Brevo, Outlook...)
+                      </span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Optionnel</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Saisissez vos identifiants SMTP pour expédier directement vos e-mails de rappel en temps réel :
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hôte SMTP</label>
+                        <input
+                          type="text"
+                          value={smtpHost}
+                          onChange={(e) => {
+                            setSmtpHost(e.target.value);
+                            localStorage.setItem("planmastergo_smtp_host", e.target.value);
+                          }}
+                          placeholder="smtp.gmail.com"
+                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Port SMTP</label>
+                        <input
+                          type="text"
+                          value={smtpPort}
+                          onChange={(e) => {
+                            setSmtpPort(e.target.value);
+                            localStorage.setItem("planmastergo_smtp_port", e.target.value);
+                          }}
+                          placeholder="587"
+                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Utilisateur SMTP</label>
+                        <input
+                          type="text"
+                          value={smtpUser}
+                          onChange={(e) => {
+                            setSmtpUser(e.target.value);
+                            localStorage.setItem("planmastergo_smtp_user", e.target.value);
+                          }}
+                          placeholder="votre@email.com"
+                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Mot de passe SMTP / App Key</label>
+                        <input
+                          type="password"
+                          value={smtpPass}
+                          onChange={(e) => {
+                            setSmtpPass(e.target.value);
+                            localStorage.setItem("planmastergo_smtp_pass", e.target.value);
+                          }}
+                          placeholder="••••••••••••"
+                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Custom Twilio Configuration */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Phone className="w-4 h-4 text-sky-600" />
+                        Identifiants Twilio SMS
+                      </span>
+                      <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full">Optionnel</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Saisissez vos identifiants Twilio API pour expédier de vrais SMS :
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Twilio Account SID</label>
+                        <input
+                          type="text"
+                          value={twilioSid}
+                          onChange={(e) => {
+                            setTwilioSid(e.target.value);
+                            localStorage.setItem("planmastergo_twilio_sid", e.target.value);
+                          }}
+                          placeholder="ACxxxxxxxxxxxxxxxx"
+                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Twilio Auth Token</label>
+                        <input
+                          type="password"
+                          value={twilioToken}
+                          onChange={(e) => {
+                            setTwilioToken(e.target.value);
+                            localStorage.setItem("planmastergo_twilio_token", e.target.value);
+                          }}
+                          placeholder="••••••••••••"
+                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Numéro expéditeur Twilio</label>
+                        <input
+                          type="tel"
+                          value={twilioFrom}
+                          onChange={(e) => {
+                            setTwilioFrom(e.target.value);
+                            localStorage.setItem("planmastergo_twilio_from", e.target.value);
+                          }}
+                          placeholder="+1234567890"
+                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="p-3.5 bg-sky-50/70 border border-sky-200 rounded-xl space-y-2 text-xs text-sky-900">
                     <div className="flex items-center gap-2 font-bold text-sky-800">
                       <Smartphone className="w-4 h-4 text-sky-600" />
-                      <span>Intégration SMS Twilio & Email Automatique</span>
+                      <span>Notifications Email & SMS Directes</span>
                     </div>
                     <p className="leading-relaxed">
-                      L'application supporte les notifications en direct via <strong>Twilio</strong> pour les SMS et <strong>SMTP</strong> pour les e-mails.
-                    </p>
-                    <p className="leading-relaxed text-[11px] text-sky-800/90">
-                      • Pour activer l'envoi réel de SMS Twilio, configurez les variables <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code> et <code>TWILIO_PHONE_NUMBER</code> dans les paramètres d'environnement de l'application.
-                      <br />
-                      • En l'absence de clés d'API, le mode <strong>Simulation Twilio</strong> affiche automatiquement un pop-up d'alerte SMS à l'écran avec le texte exact du message.
+                      L'envoi des rappels s'effectue via votre serveur <strong>SMTP</strong> ou vos clés <strong>Twilio</strong>.
                     </p>
                   </div>
                 </div>
@@ -3547,9 +3688,9 @@ export default function App() {
 
       {/* Edit Day Modal */}
       {isModalOpen && selectedDates.length > 0 && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-modal rounded-2xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-slate-50/50">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+          <div className="glass-modal rounded-2xl w-full max-w-md max-h-[92vh] sm:max-h-[88vh] flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden border border-slate-200/80">
+            <div className="px-5 py-3.5 border-b border-slate-100 flex justify-between items-center bg-slate-50/90 shrink-0">
               <h3 className="font-bold text-slate-800 text-lg capitalize">
                 {selectedDates.length === 1
                   ? new Intl.DateTimeFormat("fr-FR", {
@@ -3570,7 +3711,7 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-5">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Statut du jour
@@ -3908,6 +4049,7 @@ export default function App() {
                       const emailBody = `Bonjour,\n\nVotre note et rappel PlanMasterGO ont été enregistrés avec succès !\n\n📅 Date(s) concernée(s) : ${datesFormatted}\n📝 Note / Détails : ${editNote || "Aucune note saisie"}\n⏰ Heure : ${editAppointmentTime || "Non précisée"}\n⚡ Rappel automatique : ${timingLabel} à ${editReminderTime || "09:00"}\n\nL'email de rappel vous sera délivré à l'échéance programmée à l'adresse : ${targetEmail}.\n\nCordialement,\nL'équipe PlanMasterGO`;
 
                       try {
+                        const configs = getNotificationConfigs();
                         const res = await fetch("/api/notify", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -3915,6 +4057,7 @@ export default function App() {
                             type: "email",
                             to: targetEmail,
                             message: emailBody,
+                            ...configs
                           }),
                         });
 
@@ -3926,18 +4069,9 @@ export default function App() {
                           setActiveToast({
                             id: "auto-mail-" + Date.now(),
                             title: `Notification Email (${editReminderTiming === "7d" ? "Rappel 7 jours" : editReminderTiming === "48h" ? "Rappel 48h" : "Rappel"}) Activée`,
-                            subtitle: `Un mail de confirmation a été envoyé à ${targetEmail} pour la note du ${datesFormatted}.`,
+                            subtitle: `Un mail de confirmation a été transmis à ${targetEmail} pour la note du ${datesFormatted}.`,
                             type: "email",
                           });
-
-                          if (data.simulated) {
-                            setSimulatedNotification({
-                              type: "email",
-                              to: targetEmail,
-                              message: emailBody,
-                              info: data.info || "Notification automatique simulée avec succès.",
-                            });
-                          }
                         } else {
                           setActiveToast({
                             id: "auto-mail-err-" + Date.now(),
@@ -3959,6 +4093,7 @@ export default function App() {
                       const smsBody = `PlanMasterGO: Rappel programmé pour le ${datesFormatted} (${timingLabel} à ${editReminderTime || "09:00"}). Note: ${editNote || "Rendez-vous"}`;
 
                       try {
+                        const configs = getNotificationConfigs();
                         const res = await fetch("/api/notify", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -3966,6 +4101,7 @@ export default function App() {
                             type: "sms",
                             to: targetPhone,
                             message: smsBody,
+                            ...configs
                           }),
                         });
 
@@ -3977,18 +4113,9 @@ export default function App() {
                           setActiveToast({
                             id: "auto-sms-" + Date.now(),
                             title: `Notification SMS Twilio (${editReminderTiming === "7d" ? "Rappel 7 jours" : editReminderTiming === "48h" ? "Rappel 48h" : "Rappel"}) Activée`,
-                            subtitle: `Un SMS de confirmation a été envoyé à ${targetPhone}.`,
+                            subtitle: `Un SMS de confirmation a été transmis à ${targetPhone}.`,
                             type: "sms",
                           });
-
-                          if (data.simulated) {
-                            setSimulatedNotification({
-                              type: "sms",
-                              to: targetPhone,
-                              message: smsBody,
-                              info: data.info || "Notification SMS Twilio simulée. Pour de vrais SMS, configurez TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN et TWILIO_PHONE_NUMBER dans les Secrets.",
-                            });
-                          }
                         } else {
                           setActiveToast({
                             id: "auto-sms-err-" + Date.now(),
