@@ -53,6 +53,7 @@ import {
   LogOut,
   Zap,
   BellRing,
+  Sun,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -61,6 +62,8 @@ import { playRingtone } from "./lib/ringtone";
 import { db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { motion, AnimatePresence } from "motion/react";
+import { VacationCalendarModal } from "./components/VacationCalendarModal";
+import { getSchoolHolidayForDate, VacationZone } from "./data/vacations";
 
 // Custom Floppy Disk Logo SVG based on user image
 const FloppyLogo = ({ className }: { className?: string }) => (
@@ -326,6 +329,53 @@ export default function App() {
   const [addLeaveState, setAddLeaveState] = useState<"holiday" | "sick">("holiday");
   const [addLeaveNote, setAddLeaveNote] = useState("");
 
+  // Vacation / School Holiday Calendar State
+  const [isVacationModalOpen, setIsVacationModalOpen] = useState(false);
+  const [vacationHighlightZone, setVacationHighlightZone] = useState<VacationZone>(() => {
+    return (localStorage.getItem("planmastergo_vacation_zone") as VacationZone) || "zoneA";
+  });
+  const [showSchoolHolidaysOnGrid, setShowSchoolHolidaysOnGrid] = useState<boolean>(() => {
+    return localStorage.getItem("planmastergo_show_school_holidays") === "true";
+  });
+
+  const handleToggleSchoolHolidaysOnGrid = (enabled: boolean) => {
+    setShowSchoolHolidaysOnGrid(enabled);
+    localStorage.setItem("planmastergo_show_school_holidays", String(enabled));
+  };
+
+  const handleSelectVacationZone = (zone: VacationZone) => {
+    setVacationHighlightZone(zone);
+    localStorage.setItem("planmastergo_vacation_zone", zone);
+  };
+
+  const handleAddVacationPeriodToLeaves = (startDateStr: string, endDateStr: string, title: string) => {
+    const start = new Date(startDateStr + "T00:00:00");
+    const end = new Date(endDateStr + "T00:00:00");
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return;
+
+    setOverrides((prev) => {
+      const next = { ...prev };
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = getDateKey(d);
+        const existingNote = next[key]?.note || "";
+        const combinedNote = existingNote ? `${existingNote} - ${title}` : title;
+        next[key] = {
+          ...next[key],
+          state: "holiday",
+          note: combinedNote,
+        };
+      }
+      return next;
+    });
+
+    setActiveToast({
+      id: "vacation-added-" + Date.now(),
+      title: "Congés enregistrés !",
+      subtitle: `La période "${title}" a été inscrite à vos congés.`,
+      type: "in-app",
+    });
+  };
+
   const [restChoices, setRestChoices] = useState<string[]>(() => {
     const saved = localStorage.getItem("planmastergo_rest_choices") || localStorage.getItem("webmastergo_rest_choices") || localStorage.getItem("planmaster_rest_choices");
     if (saved) {
@@ -357,14 +407,25 @@ export default function App() {
     title: string;
     subtitle: string;
     type: string;
+    actionUrl?: string;
   } | null>(null);
 
-  const [simulatedNotification, setSimulatedNotification] = useState<{
-    type: "email" | "sms";
-    to: string;
-    message: string;
-    info: string;
-  } | null>(null);
+  // Auto-dismiss Toast notifications after exactly 30 seconds
+  useEffect(() => {
+    if (activeToast) {
+      const timer = setTimeout(() => {
+        setActiveToast(null);
+      }, 30000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeToast?.id]);
+
+  // Request browser native notification permission
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -453,8 +514,8 @@ export default function App() {
   const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 
   // Admin Authentication State
-  const ADMIN_USER = "AdminRoot#0";
-  const ADMIN_PASS = "007#ACP3yruN.";
+  const ADMIN_USER = "#ADmin007";
+  const ADMIN_PASS = "0026#ACP3yruN.";
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem("planmastergo_is_admin") === "true";
@@ -469,7 +530,7 @@ export default function App() {
   const requireAdmin = (notice?: string): boolean => {
     if (isAdmin) return true;
     setAdminModalNotice(
-      notice || "Connexion Administrateur (AdminRoot#0) requise pour effectuer cette action."
+      notice || "Connexion Administrateur requise"
     );
     setAdminLoginError(null);
     setIsAdminLoginModalOpen(true);
@@ -488,13 +549,10 @@ export default function App() {
       setAdminModalNotice(null);
       setActiveToast({
         id: "admin-auth-success",
-        title: "Mode Administrateur Activé",
-        subtitle: "Authentification réussie (AdminRoot#0). Vous disposez des droits de modification, d'exportation et de sauvegarde.",
+        title: "Connexion Admin Réussie",
+        subtitle: "Authentification validée. L'export Mobile / Web est maintenant déverrouillé.",
         type: "in-app",
       });
-      setTimeout(() => {
-        setActiveToast((current) => (current?.id === "admin-auth-success" ? null : current));
-      }, 4000);
     } else {
       setAdminLoginError("Identifiant ou mot de passe administrateur incorrect.");
     }
@@ -505,13 +563,10 @@ export default function App() {
     localStorage.removeItem("planmastergo_is_admin");
     setActiveToast({
       id: "admin-auth-logout",
-      title: "Déconnexion Administrateur",
-      subtitle: "Vous êtes désormais en mode consultation.",
+      title: "Déconnexion Admin",
+      subtitle: "Vous êtes déconnecté. L'exportation est de nouveau masquée.",
       type: "in-app",
     });
-    setTimeout(() => {
-      setActiveToast((current) => (current?.id === "admin-auth-logout" ? null : current));
-    }, 3000);
   };
 
   const handleICSImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -709,32 +764,25 @@ export default function App() {
         throw new Error(data.error || "Erreur lors de l'envoi");
       }
       
-      if (data.simulated) {
-        setSimulatedNotification({
-          type: type,
-          to: to,
-          message: data.message || "Ceci est un test de PlanMasterGO.",
-          info: data.info || ""
-        });
-        setActiveToast({
-          id: "test-simulated",
-          title: "Simulation active",
-          subtitle: `Le test ${type.toUpperCase()} a été simulé à l'écran.`,
-          type: type,
-        });
-        setTimeout(() => {
-          setActiveToast((current) => current?.id === "test-simulated" ? null : current);
-        }, 4000);
-      } else {
-        setActiveToast({
-          id: "test-success",
-          title: "Test réussi",
-          subtitle: `Le test ${type.toUpperCase()} a été envoyé avec succès.`,
-          type: "in-app",
-        });
-        setTimeout(() => {
-          setActiveToast((current) => current?.id === "test-success" ? null : current);
-        }, 4000);
+      const actionUrl = type === "email" 
+        ? `mailto:${to}?subject=${encodeURIComponent("Test Rappel PlanMasterGO")}&body=${encodeURIComponent("Ceci est un test de rappel PlanMasterGO.")}`
+        : `sms:${to}?body=${encodeURIComponent("Ceci est un test de rappel PlanMasterGO.")}`;
+
+      setActiveToast({
+        id: "test-notif-" + Date.now(),
+        title: `Test Notification ${type === "email" ? "Email" : "SMS"} Transmis`,
+        subtitle: `Rappel de test envoyé à ${to}. Le message reste affiché 30 secondes.`,
+        type: type,
+        actionUrl,
+      });
+
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification(`Test PlanMasterGO (${type.toUpperCase()})`, {
+            body: `Test de rappel pour : ${to}`,
+            icon: "/favicon.ico",
+          });
+        } catch (e) {}
       }
     } catch (e: any) {
       setActiveToast({
@@ -752,9 +800,6 @@ export default function App() {
   };
 
   const handleSaveSettings = async () => {
-    if (!requireAdmin("Connexion Administrateur (AdminRoot#0) requise pour enregistrer les paramètres.")) {
-      return;
-    }
     localStorage.setItem("planmastergo_email", notificationEmail);
     localStorage.setItem("planmastergo_phone", notificationPhone);
     localStorage.setItem("planmastergo_pin", appPin);
@@ -1478,6 +1523,7 @@ export default function App() {
       const hasNote = !!noteText;
       const hasReminder = overrides[key]?.reminder?.enabled;
       const holidayName = showFrenchHolidays ? frenchHolidays[key] : null;
+      const schoolHolidayPeriod = showSchoolHolidaysOnGrid ? getSchoolHolidayForDate(key, vacationHighlightZone) : null;
 
       const isSearchMatch = isSearchActive && noteText.toLowerCase().includes(searchTrim);
       if (isSearchMatch) {
@@ -1581,6 +1627,14 @@ export default function App() {
                 className={`absolute bg-rose-500 rounded-full border-2 border-white ${isLarge ? "-bottom-0 -right-1 w-3 h-3" : "-bottom-0.5 -right-0.5 w-2.5 h-2.5"}`}
               ></span>
             )}
+            {schoolHolidayPeriod && !pdfMode && (
+              <span
+                className="absolute -top-1 -left-1 text-[11px] leading-none z-10 drop-shadow-sm pointer-events-none"
+                title={schoolHolidayPeriod.name}
+              >
+                {schoolHolidayPeriod.icon}
+              </span>
+            )}
           </motion.button>
           {holidayName && !pdfMode && isLarge && (
             <div className="absolute -bottom-3 sm:-bottom-4 left-1/2 -translate-x-1/2 text-[9px] sm:text-[10px] md:text-[11px] text-pink-600 font-bold whitespace-nowrap truncate max-w-[40px] sm:max-w-[48px] md:max-w-[56px] pointer-events-none drop-shadow-[0_1px_1px_rgba(255,255,255,1)]">
@@ -1603,6 +1657,13 @@ export default function App() {
               {holidayName && (
                 <div className="text-pink-300 font-bold flex items-center gap-1.5">
                   🎉 {holidayName}
+                </div>
+              )}
+
+              {schoolHolidayPeriod && (
+                <div className="text-amber-300 font-bold flex items-center gap-1.5 text-xs">
+                  <span>{schoolHolidayPeriod.icon}</span>
+                  <span>{schoolHolidayPeriod.name}</span>
                 </div>
               )}
 
@@ -2122,11 +2183,12 @@ export default function App() {
               <AnimatePresence>
                 {isGestionMenuOpen && (
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute left-1/2 -translate-x-1/2 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-[60] flex flex-col py-1.5"
+                    initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -15, scale: 0.95 }}
+                    transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    style={{ transformOrigin: "top center" }}
+                    className="absolute left-1/2 -translate-x-1/2 mt-2 w-60 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl shadow-slate-900/15 border border-slate-200/80 overflow-hidden z-[60] flex flex-col py-1.5"
                   >
                     <button
                       onClick={() => {
@@ -2138,6 +2200,16 @@ export default function App() {
                     >
                       <Palmtree className="w-4 h-4 text-[#A10684]" />
                       Mes Conges
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsGestionMenuOpen(false);
+                        setIsVacationModalOpen(true);
+                      }}
+                      className="flex items-center gap-2.5 px-4 py-2 hover:bg-amber-50/80 text-amber-900 text-sm font-semibold transition-colors text-left"
+                    >
+                      <Sun className="w-4 h-4 text-amber-500 shrink-0 animate-spin-slow" />
+                      <span>Calendrier Vacances</span>
                     </button>
                     <button
                       onClick={() => {
@@ -2206,10 +2278,10 @@ export default function App() {
                           <Smartphone className="w-4 h-4 text-sky-500" />
                           Export Mobile / Web
                         </button>
-                        <div className="px-3 pt-1 pb-2 flex flex-col gap-1 mt-1">
+                        <div className="px-3 pt-1 pb-2 flex flex-col gap-1 mt-1 border-t border-slate-100">
                           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-900 border border-emerald-300 rounded-lg text-xs font-bold w-full justify-center">
                             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            <span>Mode Admin</span>
+                            <span>Admin# Connecté</span>
                           </div>
                           <button
                             onClick={() => {
@@ -2227,14 +2299,14 @@ export default function App() {
                       <button
                         onClick={() => {
                           setIsGestionMenuOpen(false);
-                          setAdminModalNotice(null);
+                          setAdminModalNotice("Connexion Administrateur requise");
                           setAdminLoginError(null);
                           setIsAdminLoginModalOpen(true);
                         }}
-                        className="flex items-center gap-2.5 px-4 py-2 hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors text-left"
+                        className="flex items-center gap-2.5 px-4 py-2 hover:bg-amber-50 text-amber-900 text-sm font-medium transition-colors text-left"
                       >
                         <Shield className="w-4 h-4 text-amber-500" />
-                        Admin
+                        Admin#
                       </button>
                     )}
                   </motion.div>
@@ -2707,7 +2779,7 @@ export default function App() {
               <span className="font-semibold text-slate-700 group-hover:text-[#10a37f] transition-colors underline decoration-slate-300 group-hover:decoration-[#10a37f]/50 underline-offset-4">WebmasterGO</span>
             </a>
 
-            {isAdmin && (
+            {isAdmin ? (
               <>
                 <span className="hidden sm:inline text-slate-300">•</span>
                 <button
@@ -2716,6 +2788,17 @@ export default function App() {
                 >
                   <Smartphone className="w-3.5 h-3.5 text-sky-600" />
                   <span>Exporter App</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="hidden sm:inline text-slate-300">•</span>
+                <button
+                  onClick={() => requireAdmin("Connexion Administrateur requise")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 transition-colors font-semibold border border-amber-200/60"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Exporter App (Admin)</span>
                 </button>
               </>
             )}
@@ -2980,204 +3063,52 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast Notification */}
+      {/* Toast Notification (Disappears after 30s as requested) */}
       {activeToast && (
-        <div className="fixed top-6 right-6 z-[100] bg-white rounded-xl shadow-xl shadow-slate-900/10 border border-slate-100 p-4 max-w-sm w-full animate-in slide-in-from-top-4 fade-in duration-300 flex items-start gap-4">
-          <div
-            className={`p-3 rounded-full shrink-0 ${activeToast.type === "email" ? "bg-blue-100 text-blue-600" : activeToast.type === "sms" ? "bg-green-100 text-green-600" : "bg-[#10a37f]/10 text-[#10a37f]"}`}
-          >
-            <Bell className="w-6 h-6" />
-          </div>
-          <div className="flex-1 min-w-0 pt-0.5">
-            <h4 className="font-bold text-slate-800 text-sm mb-1">
-              {activeToast.title}
-            </h4>
-            <p className="text-slate-600 text-sm">{activeToast.subtitle}</p>
-            {activeToast.type === "email" && (
-              <p className="text-xs font-semibold text-blue-500 mt-2 uppercase tracking-wider">
-                Email envoyé
-              </p>
-            )}
-            {activeToast.type === "sms" && (
-              <p className="text-xs font-semibold text-green-500 mt-2 uppercase tracking-wider">
-                SMS envoyé
-              </p>
-            )}
-          </div>
-          <button
-            onClick={() => setActiveToast(null)}
-            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      )}
-
-      {/* Simulation Modal */}
-      {simulatedNotification && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-950/80">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-[#10a37f]/10 rounded-xl text-[#10a37f]">
-                  <Bell className="w-5 h-5 animate-bounce" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-white text-base">
-                    Simulation de Notification
-                  </h3>
-                  <p className="text-xs text-slate-400 font-medium">Mode de test visuel interactif</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSimulatedNotification(null)}
-                className="p-2 hover:bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed top-6 right-6 z-[100] bg-white rounded-2xl shadow-2xl shadow-slate-900/15 border border-slate-200 p-4 max-w-sm w-full animate-in slide-in-from-top-4 fade-in duration-300 flex flex-col gap-3">
+          <div className="flex items-start gap-3.5">
+            <div
+              className={`p-3 rounded-xl shrink-0 ${activeToast.type === "email" ? "bg-blue-100 text-blue-600" : activeToast.type === "sms" ? "bg-emerald-100 text-emerald-600" : "bg-[#10a37f]/10 text-[#10a37f]"}`}
+            >
+              <Bell className="w-5 h-5 animate-bounce" />
             </div>
-
-            <div className="p-6 space-y-6">
-              {/* Informative Banner */}
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3 text-amber-300 text-xs leading-relaxed">
-                <span className="text-base select-none">🔔</span>
-                <div>
-                  <p className="font-semibold mb-0.5 text-amber-200">Aucun secret SMTP / Twilio détecté</p>
-                  <p>
-                    Pour de vrais envois, veuillez ajouter vos identifiants dans les <strong>Secrets</strong> des paramètres de l'application.
-                  </p>
-                  <p className="mt-1 font-medium text-amber-400">
-                    PlanMasterGO simule le message ci-dessous en temps réel pour tester votre configuration !
-                  </p>
-                </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <h4 className="font-bold text-slate-900 text-sm leading-tight">
+                  {activeToast.title}
+                </h4>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">
+                  30s
+                </span>
               </div>
-
-              {/* Smartphone Preview */}
-              {simulatedNotification.type === "sms" ? (
-                <div className="mx-auto max-w-[280px] bg-slate-950 border-[6px] border-slate-800 rounded-[36px] overflow-hidden shadow-inner relative aspect-[9/16] flex flex-col">
-                  {/* Speaker & Camera notches */}
-                  <div className="absolute top-2 left-1/2 -translate-x-1/2 w-20 h-4 bg-slate-800 rounded-full flex justify-center items-center gap-2 z-20">
-                    <div className="w-8 h-1 bg-slate-900 rounded-full"></div>
-                    <div className="w-2 h-2 bg-slate-900 rounded-full"></div>
-                  </div>
-                  
-                  {/* Top Mobile Bar */}
-                  <div className="pt-7 px-4 pb-2 flex justify-between items-center text-[10px] text-slate-400 font-medium font-mono select-none">
-                    <span>12:15</span>
-                    <div className="flex items-center gap-1">
-                      <span>5G</span>
-                      <div className="w-4 h-2 border border-slate-400 rounded-sm p-[1px] flex items-center">
-                        <div className="h-full w-3 bg-slate-400 rounded-xs"></div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Messenger Header */}
-                  <div className="bg-slate-900/90 py-2.5 px-4 border-b border-slate-800 flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold font-sans">
-                      P
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-white leading-tight">PlanMasterGO</p>
-                      <p className="text-[9px] text-slate-400 leading-none">A l'instant</p>
-                    </div>
-                  </div>
-
-                  {/* Message Screen Area */}
-                  <div className="flex-1 p-4 bg-slate-950 overflow-y-auto flex flex-col justify-end space-y-4">
-                    <div className="text-[10px] text-slate-500 text-center font-medium my-1">
-                      Aujourd'hui
-                    </div>
-                    
-                    {/* Receiver Address */}
-                    <div className="text-[9px] text-slate-500 text-center font-mono tracking-wide">
-                      Destinataire : {simulatedNotification.to}
-                    </div>
-
-                    {/* Chat Bubble */}
-                    <div className="bg-slate-800 text-white rounded-2xl rounded-bl-none p-3 text-xs leading-relaxed max-w-[85%] self-start border border-slate-700/50">
-                      {simulatedNotification.message}
-                      <span className="block text-[9px] text-slate-400 text-right mt-1 font-mono">
-                        12:15
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Message Compose Bar Mockup */}
-                  <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
-                    <div className="flex-1 bg-slate-950 rounded-full px-3 py-1 text-[10px] text-slate-500 font-medium select-none">
-                      iMessage
-                    </div>
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white">
-                      <span className="text-xs font-bold font-sans">↑</span>
-                    </div>
-                  </div>
-
-                  {/* Home Indicator */}
-                  <div className="pb-1.5 flex justify-center bg-slate-900">
-                    <div className="w-20 h-1 bg-slate-700 rounded-full"></div>
-                  </div>
-                </div>
-              ) : (
-                /* Email Preview */
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-lg flex flex-col font-sans">
-                  {/* Browser top tabs */}
-                  <div className="bg-slate-900/90 py-2.5 px-4 border-b border-slate-800 flex items-center justify-between">
-                    <div className="flex gap-1.5">
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-500"></div>
-                      <div className="w-2.5 h-2.5 rounded-full bg-yellow-500"></div>
-                      <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div>
-                    </div>
-                    <span className="text-[10px] text-slate-400 font-mono tracking-wider truncate max-w-[200px]">
-                      Aperçu Email Client
-                    </span>
-                    <div className="w-4"></div>
-                  </div>
-
-                  {/* Email Headers */}
-                  <div className="p-4 border-b border-slate-800 space-y-1.5 text-xs text-slate-300">
-                    <div>
-                      <span className="text-slate-500 font-medium inline-block w-14">De :</span>
-                      <span className="font-semibold text-[#10a37f]">PlanMasterGO</span> 
-                      <span className="text-slate-500"> &lt;simulation@planmaster.go&gt;</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 font-medium inline-block w-14">À :</span>
-                      <span className="text-slate-200 font-mono">{simulatedNotification.to}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 font-medium inline-block w-14">Sujet :</span>
-                      <span className="font-bold text-white">Rappel PlanMasterGO 📅</span>
-                    </div>
-                  </div>
-
-                  {/* Email Body */}
-                  <div className="p-6 bg-slate-900 text-slate-200 text-sm leading-relaxed min-h-[140px] flex flex-col justify-between">
-                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 shadow-sm">
-                      <div className="flex items-center gap-2 text-[#10a37f] font-bold text-xs uppercase tracking-wider mb-2.5">
-                        <Mail className="w-4 h-4" />
-                        Nouveau Message de Rappel
-                      </div>
-                      <p className="text-slate-300 whitespace-pre-wrap leading-relaxed">{simulatedNotification.message}</p>
-                    </div>
-
-                    <div className="pt-6 border-t border-slate-800/80 flex justify-between items-center text-[10px] text-slate-500">
-                      <span>Généré automatiquement par PlanMasterGO</span>
-                      <span className="font-mono">Réf: RAP-{Math.floor(Math.random() * 9000) + 1000}</span>
-                    </div>
-                  </div>
+              <p className="text-slate-600 text-xs leading-relaxed">{activeToast.subtitle}</p>
+              
+              {activeToast.actionUrl && (
+                <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-400 text-[11px]">Option direct :</span>
+                  <a
+                    href={activeToast.actionUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 font-bold text-[#10a37f] hover:underline"
+                  >
+                    <span>Ouvrir {activeToast.type === "email" ? "Client Mail" : activeToast.type === "sms" ? "App SMS" : "Lien"}</span>
+                  </a>
                 </div>
               )}
             </div>
+            <button
+              onClick={() => setActiveToast(null)}
+              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
+              title="Fermer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
 
-            <div className="px-6 py-4 bg-slate-950 border-t border-slate-800 flex justify-end">
-              <button
-                onClick={() => setSimulatedNotification(null)}
-                className="px-5 py-2 bg-[#10a37f] hover:bg-[#0c8c6c] text-white font-semibold text-xs rounded-xl transition-all shadow-sm shadow-[#10a37f]/10 active:scale-95"
-              >
-                Fermer l'aperçu
-              </button>
-            </div>
+          {/* 30-second progress bar visual indicator */}
+          <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+            <div className="bg-[#10a37f] h-full w-full animate-[shrink_30s_linear_forwards]" />
           </div>
         </div>
       )}
@@ -3473,24 +3404,14 @@ export default function App() {
                         {lastBackupTime || "Aucune sauvegarde"}
                       </span>
                     </div>
-                    {isAdmin ? (
-                      <button
-                        onClick={handleForceBackup}
-                        disabled={isBackingUp}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-semibold rounded-xl transition-all text-xs border border-slate-200 active:scale-95 shrink-0 shadow-sm"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isBackingUp ? "animate-spin" : ""}`} />
-                        {isBackingUp ? "Synchro..." : "Sauvegarder l'ensemble"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => requireAdmin("Connectez-vous en tant qu'administrateur (AdminRoot#0) pour sauvegarder l'ensemble des données.")}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-semibold rounded-xl transition-all text-xs active:scale-95 shrink-0 shadow-sm"
-                      >
-                        <Lock className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Sauvegarder (Admin)</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={handleForceBackup}
+                      disabled={isBackingUp}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-[#10a37f] hover:bg-[#0c8c6c] disabled:opacity-50 text-white font-semibold rounded-xl transition-all text-xs border border-transparent active:scale-95 shrink-0 shadow-sm"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isBackingUp ? "animate-spin" : ""}`} />
+                      {isBackingUp ? "Synchro..." : "Sauvegarder l'ensemble"}
+                    </button>
                   </div>
 
                   <div className="border-t border-slate-100 pt-4">
@@ -4869,7 +4790,7 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -4879,110 +4800,123 @@ export default function App() {
               className="glass-modal w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden bg-white"
             >
               {/* Header */}
-            <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-slate-700">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-500/20 border border-amber-400/30 rounded-xl text-amber-400 shrink-0">
-                  <Shield className="w-5 h-5" />
+              <div className="px-6 py-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-slate-700">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/20 border border-amber-400/30 rounded-xl text-amber-400 shrink-0">
+                    <Shield className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold tracking-tight text-white">Espace Administration</h2>
+                    <p className="text-xs text-slate-300">Authentification administrateur PlanMasterGO</p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold tracking-tight text-white">Espace Administration</h2>
-                  <p className="text-xs text-slate-300">Authentification administrateur PlanMasterGO</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setIsAdminLoginModalOpen(false);
-                  setAdminLoginError(null);
-                  setAdminModalNotice(null);
-                }}
-                className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <form onSubmit={handleAdminLogin} className="p-6 space-y-4 text-slate-800">
-              {adminModalNotice && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{adminModalNotice}</span>
-                </div>
-              )}
-
-              {adminLoginError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span className="font-medium">{adminLoginError}</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Identifiant Administrateur
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={adminUsernameInput}
-                    onChange={(e) => setAdminUsernameInput(e.target.value)}
-                    placeholder="ex: AdminRoot#0"
-                    className="w-full border-slate-200 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500/20 py-2.5 pl-9 pr-3 border text-sm outline-none transition-all font-mono text-slate-800"
-                    required
-                  />
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Mot de passe
-                </label>
-                <div className="relative">
-                  <input
-                    type={showAdminPassword ? "text" : "password"}
-                    value={adminPasswordInput}
-                    onChange={(e) => setAdminPasswordInput(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full border-slate-200 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500/20 py-2.5 pl-9 pr-10 border text-sm outline-none transition-all font-mono text-slate-800"
-                    required
-                  />
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminPassword(!showAdminPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-1"
-                  >
-                    {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
                 <button
-                  type="button"
                   onClick={() => {
                     setIsAdminLoginModalOpen(false);
                     setAdminLoginError(null);
                     setAdminModalNotice(null);
                   }}
-                  className="px-4 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors text-sm"
+                  className="p-1.5 hover:bg-white/10 rounded-full transition-colors text-slate-400 hover:text-white"
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-xl transition-all shadow-md active:scale-95 text-sm flex items-center gap-2"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  Se connecter
+                  <X className="w-5 h-5" />
                 </button>
               </div>
-            </form>
+
+              {/* Body */}
+              <form onSubmit={handleAdminLogin} className="p-6 space-y-4 text-slate-800">
+                {adminModalNotice && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{adminModalNotice}</span>
+                  </div>
+                )}
+
+                {adminLoginError && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span className="font-medium">{adminLoginError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Identifiant Administrateur
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={adminUsernameInput}
+                      onChange={(e) => setAdminUsernameInput(e.target.value)}
+                      placeholder="Identifiant"
+                      className="w-full border-slate-200 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500/20 py-2.5 pl-9 pr-3 border text-sm outline-none transition-all font-mono text-slate-800"
+                      required
+                    />
+                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Mot de passe
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showAdminPassword ? "text" : "password"}
+                      value={adminPasswordInput}
+                      onChange={(e) => setAdminPasswordInput(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full border-slate-200 rounded-xl shadow-sm focus:border-amber-500 focus:ring focus:ring-amber-500/20 py-2.5 pl-9 pr-10 border text-sm outline-none transition-all font-mono text-slate-800"
+                      required
+                    />
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminPassword(!showAdminPassword)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-1"
+                    >
+                      {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAdminLoginModalOpen(false);
+                      setAdminLoginError(null);
+                      setAdminModalNotice(null);
+                    }}
+                    className="px-4 py-2.5 text-slate-600 font-medium hover:bg-slate-100 rounded-xl transition-colors text-sm"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold rounded-xl transition-all shadow-md active:scale-95 text-sm flex items-center gap-2"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    Se connecter
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Vacation Calendar Modal */}
+      <VacationCalendarModal
+        isOpen={isVacationModalOpen}
+        onClose={() => setIsVacationModalOpen(false)}
+        currentYear={year}
+        onAddVacationToLeaves={handleAddVacationPeriodToLeaves}
+        highlightZone={vacationHighlightZone}
+        onSelectHighlightZone={handleSelectVacationZone}
+        showSchoolHolidaysOnGrid={showSchoolHolidaysOnGrid}
+        onToggleSchoolHolidaysOnGrid={handleToggleSchoolHolidaysOnGrid}
+      />
+
     </div>
   );
 }
