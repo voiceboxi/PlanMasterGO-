@@ -334,6 +334,7 @@ export default function App() {
   // Vacation / School Holiday Calendar State
   const [isVacationModalOpen, setIsVacationModalOpen] = useState(false);
   const [isDashboardModalOpen, setIsDashboardModalOpen] = useState(false);
+  const [showAdvancedServerConfig, setShowAdvancedServerConfig] = useState(false);
   const [vacationHighlightZone, setVacationHighlightZone] = useState<VacationZone>(() => {
     return (localStorage.getItem("planmastergo_vacation_zone") as VacationZone) || "zoneA";
   });
@@ -3205,14 +3206,14 @@ export default function App() {
                     <div className="flex justify-between items-center mb-1.5">
                       <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                         <Phone className="w-4 h-4 text-sky-600" />
-                        Numéro SMS (Twilio Integration)
+                        Numéro SMS pour les rappels
                       </label>
                       <button 
                         onClick={() => handleTestNotification('sms')}
                         disabled={!notificationPhone || isTestingNotification}
                         className="text-[11px] bg-sky-100 hover:bg-sky-200 disabled:opacity-50 text-sky-800 px-2.5 py-1 rounded-lg font-bold transition-colors"
                       >
-                        {isTestingNotification ? "Envoi..." : "Tester SMS Twilio"}
+                        {isTestingNotification ? "Envoi..." : "Tester SMS"}
                       </button>
                     </div>
                     <input
@@ -3227,136 +3228,155 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Custom SMTP Configuration */}
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                        <Mail className="w-4 h-4 text-[#10a37f]" />
-                        Serveur Email SMTP (Gmail, Brevo, Outlook...)
+                  {/* Toggle Advanced Server Configuration */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedServerConfig(!showAdvancedServerConfig)}
+                      className="flex items-center justify-between w-full p-2.5 bg-slate-100 hover:bg-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 transition-colors border border-slate-200/80"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Settings2 className="w-4 h-4 text-slate-500" />
+                        <span>Configuration Serveur Avancée (SMTP / Twilio)</span>
                       </span>
-                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Optionnel</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Saisissez vos identifiants SMTP pour expédier directement vos e-mails de rappel en temps réel :
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hôte SMTP</label>
-                        <input
-                          type="text"
-                          value={smtpHost}
-                          onChange={(e) => {
-                            setSmtpHost(e.target.value);
-                            localStorage.setItem("planmastergo_smtp_host", e.target.value);
-                          }}
-                          placeholder="smtp.gmail.com"
-                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Port SMTP</label>
-                        <input
-                          type="text"
-                          value={smtpPort}
-                          onChange={(e) => {
-                            setSmtpPort(e.target.value);
-                            localStorage.setItem("planmastergo_smtp_port", e.target.value);
-                          }}
-                          placeholder="587"
-                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Utilisateur SMTP</label>
-                        <input
-                          type="text"
-                          value={smtpUser}
-                          onChange={(e) => {
-                            setSmtpUser(e.target.value);
-                            localStorage.setItem("planmastergo_smtp_user", e.target.value);
-                          }}
-                          placeholder="votre@email.com"
-                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Mot de passe SMTP / App Key</label>
-                        <input
-                          type="password"
-                          value={smtpPass}
-                          onChange={(e) => {
-                            setSmtpPass(e.target.value);
-                            localStorage.setItem("planmastergo_smtp_pass", e.target.value);
-                          }}
-                          placeholder="••••••••••••"
-                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
-                        />
-                      </div>
-                    </div>
+                      <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showAdvancedServerConfig ? "rotate-180" : ""}`} />
+                    </button>
                   </div>
 
-                  {/* Custom Twilio Configuration */}
-                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                        <Phone className="w-4 h-4 text-sky-600" />
-                        Identifiants Twilio SMS
-                      </span>
-                      <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full">Optionnel</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Saisissez vos identifiants Twilio API pour expédier de vrais SMS :
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Twilio Account SID</label>
-                        <input
-                          type="text"
-                          value={twilioSid}
-                          onChange={(e) => {
-                            setTwilioSid(e.target.value);
-                            localStorage.setItem("planmastergo_twilio_sid", e.target.value);
-                          }}
-                          placeholder="ACxxxxxxxxxxxxxxxx"
-                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
-                        />
+                  {showAdvancedServerConfig && (
+                    <div className="space-y-3 pt-1 animate-in fade-in duration-200">
+                      {/* Custom SMTP Configuration */}
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Mail className="w-4 h-4 text-[#10a37f]" />
+                            Serveur Email SMTP
+                          </span>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Optionnel</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Surchargez la configuration serveur si nécessaire (par défaut utilise les variables d'environnement) :
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Hôte SMTP</label>
+                            <input
+                              type="text"
+                              value={smtpHost}
+                              onChange={(e) => {
+                                setSmtpHost(e.target.value);
+                                localStorage.setItem("planmastergo_smtp_host", e.target.value);
+                              }}
+                              placeholder="smtp.gmail.com"
+                              className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Port SMTP</label>
+                            <input
+                              type="text"
+                              value={smtpPort}
+                              onChange={(e) => {
+                                setSmtpPort(e.target.value);
+                                localStorage.setItem("planmastergo_smtp_port", e.target.value);
+                              }}
+                              placeholder="587"
+                              className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Utilisateur SMTP</label>
+                            <input
+                              type="text"
+                              value={smtpUser}
+                              onChange={(e) => {
+                                setSmtpUser(e.target.value);
+                                localStorage.setItem("planmastergo_smtp_user", e.target.value);
+                              }}
+                              placeholder="votre@email.com"
+                              className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Mot de passe SMTP / App Key</label>
+                            <input
+                              type="password"
+                              value={smtpPass}
+                              onChange={(e) => {
+                                setSmtpPass(e.target.value);
+                                localStorage.setItem("planmastergo_smtp_pass", e.target.value);
+                              }}
+                              placeholder="••••••••••••"
+                              className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Twilio Auth Token</label>
-                        <input
-                          type="password"
-                          value={twilioToken}
-                          onChange={(e) => {
-                            setTwilioToken(e.target.value);
-                            localStorage.setItem("planmastergo_twilio_token", e.target.value);
-                          }}
-                          placeholder="••••••••••••"
-                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Numéro expéditeur Twilio</label>
-                        <input
-                          type="tel"
-                          value={twilioFrom}
-                          onChange={(e) => {
-                            setTwilioFrom(e.target.value);
-                            localStorage.setItem("planmastergo_twilio_from", e.target.value);
-                          }}
-                          placeholder="+1234567890"
-                          className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
-                        />
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="p-3.5 bg-sky-50/70 border border-sky-200 rounded-xl space-y-2 text-xs text-sky-900">
-                    <div className="flex items-center gap-2 font-bold text-sky-800">
-                      <Smartphone className="w-4 h-4 text-sky-600" />
-                      <span>Notifications Email & SMS Directes</span>
+                      {/* Custom Twilio Configuration */}
+                      <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <Phone className="w-4 h-4 text-sky-600" />
+                            Identifiants Twilio SMS
+                          </span>
+                          <span className="text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full">Optionnel</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Surchargez les clés Twilio si nécessaire :
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Twilio Account SID</label>
+                            <input
+                              type="text"
+                              value={twilioSid}
+                              onChange={(e) => {
+                                setTwilioSid(e.target.value);
+                                localStorage.setItem("planmastergo_twilio_sid", e.target.value);
+                              }}
+                              placeholder="ACxxxxxxxxxxxxxxxx"
+                              className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Twilio Auth Token</label>
+                            <input
+                              type="password"
+                              value={twilioToken}
+                              onChange={(e) => {
+                                setTwilioToken(e.target.value);
+                                localStorage.setItem("planmastergo_twilio_token", e.target.value);
+                              }}
+                              placeholder="••••••••••••"
+                              className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">Numéro expéditeur Twilio</label>
+                            <input
+                              type="tel"
+                              value={twilioFrom}
+                              onChange={(e) => {
+                                setTwilioFrom(e.target.value);
+                                localStorage.setItem("planmastergo_twilio_from", e.target.value);
+                              }}
+                              placeholder="+1234567890"
+                              className="w-full border-slate-200 rounded-lg py-1.5 px-2.5 border text-xs outline-none bg-white font-mono"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1.5 text-xs text-emerald-900">
+                    <div className="flex items-center gap-2 font-bold text-emerald-800">
+                      <Smartphone className="w-4 h-4 text-emerald-600" />
+                      <span>Rappels Automatiques Transparents</span>
                     </div>
                     <p className="leading-relaxed">
-                      L'envoi des rappels s'effectue via votre serveur <strong>SMTP</strong> ou vos clés <strong>Twilio</strong>.
+                      L'utilisateur saisit simplement son adresse email et/ou son numéro de mobile. Les envois de mails et SMS de rappel sont gérés directement par le serveur en arrière-plan.
                     </p>
                   </div>
                 </div>

@@ -24,14 +24,9 @@ app.post("/api/notify", async (req, res) => {
       const fromPhone = twilioConfig?.fromPhone || process.env.TWILIO_PHONE_NUMBER;
 
       if (!accountSid || !authToken || !fromPhone) {
-         return res.json({ 
-           success: true, 
-           simulated: true, 
-           type: "sms", 
-           to, 
-           message,
-           info: "Pour de vrais envois de SMS, renseignez vos identifiants Twilio dans les Paramètres > Notifications de l'application ou en variables d'environnement." 
-         });
+        return res.status(400).json({ 
+          error: "Configuration Twilio manquante sur le serveur (.env). Veuillez renseigner TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN et TWILIO_PHONE_NUMBER dans les paramètres AI Studio." 
+        });
       }
       
       const twilioClient = twilio(accountSid, authToken);
@@ -42,20 +37,15 @@ app.post("/api/notify", async (req, res) => {
       });
       return res.json({ success: true, id: twilioRes.sid });
     } else if (type === "email") {
-      const host = smtpConfig?.host || process.env.SMTP_HOST;
+      const host = smtpConfig?.host || process.env.SMTP_HOST || "smtp.gmail.com";
       const port = smtpConfig?.port || process.env.SMTP_PORT || "587";
       const secure = smtpConfig?.secure !== undefined ? Boolean(smtpConfig.secure) : (process.env.SMTP_SECURE === "true");
       const user = smtpConfig?.user || process.env.SMTP_USER;
       const pass = smtpConfig?.pass || process.env.SMTP_PASS;
 
-      if (!host || !user || !pass) {
-        return res.json({
-          success: true,
-          simulated: true,
-          type: "email",
-          to,
-          message,
-          info: "Pour de vrais envois d'emails, renseignez vos paramètres SMTP (ex: Gmail, Brevo...) dans les Paramètres > Notifications de l'application ou en variables d'environnement."
+      if (!user || !pass) {
+        return res.status(400).json({
+          error: "Configuration SMTP manquante sur le serveur (.env). Veuillez renseigner SMTP_USER et SMTP_PASS (Mot de passe d'application Gmail) dans les paramètres AI Studio."
         });
       }
 
@@ -80,8 +70,16 @@ app.post("/api/notify", async (req, res) => {
       return res.status(400).json({ error: "Type de notification invalide." });
     }
   } catch (error: any) {
-    console.error("Erreur d'envoi:", error);
-    return res.status(500).json({ error: error.message || "Erreur inconnue." });
+    console.error("Erreur d'envoi notification:", error);
+    let userFriendlyError = error.message || "Erreur lors de l'envoi de la notification.";
+    if (error.code === 'EAUTH' || error.responseCode === 535) {
+      userFriendlyError = "Échec authentification Gmail : Si vous utilisez Gmail, créez un 'Mot de passe d'application' (App Password) dans compte Google > Sécurité > Validation en 2 étapes > Mots de passe d'application.";
+    } else if (error.status === 401 || error.code === 20003) {
+      userFriendlyError = "Échec Twilio : Account SID ou Auth Token invalide.";
+    } else if (error.code === 21608 || error.code === 21211) {
+      userFriendlyError = "Échec Twilio : Numéro de téléphone non valide ou non autorisé dans votre compte d'essai Twilio.";
+    }
+    return res.status(500).json({ error: userFriendlyError });
   }
 });
 
