@@ -410,12 +410,12 @@ export default function App() {
     actionUrl?: string;
   } | null>(null);
 
-  // Auto-dismiss Toast notifications after exactly 30 seconds
+  // Auto-dismiss Toast notifications after exactly 10 seconds
   useEffect(() => {
     if (activeToast) {
       const timer = setTimeout(() => {
         setActiveToast(null);
-      }, 30000);
+      }, 10000);
       return () => clearTimeout(timer);
     }
   }, [activeToast?.id]);
@@ -3063,7 +3063,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast Notification (Disappears after 30s as requested) */}
+      {/* Toast Notification (Disappears automatically after 10s with visual gauge) */}
       {activeToast && (
         <div className="fixed top-6 right-6 z-[100] bg-white rounded-2xl shadow-2xl shadow-slate-900/15 border border-slate-200 p-4 max-w-sm w-full animate-in slide-in-from-top-4 fade-in duration-300 flex flex-col gap-3">
           <div className="flex items-start gap-3.5">
@@ -3077,8 +3077,8 @@ export default function App() {
                 <h4 className="font-bold text-slate-900 text-sm leading-tight">
                   {activeToast.title}
                 </h4>
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">
-                  30s
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-emerald-700 border border-slate-200 shrink-0">
+                  10s
                 </span>
               </div>
               <p className="text-slate-600 text-xs leading-relaxed">{activeToast.subtitle}</p>
@@ -3106,9 +3106,15 @@ export default function App() {
             </button>
           </div>
 
-          {/* 30-second progress bar visual indicator */}
-          <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-            <div className="bg-[#10a37f] h-full w-full animate-[shrink_30s_linear_forwards]" />
+          {/* 10-second visual gauge progress bar */}
+          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden p-0.5 border border-slate-100">
+            <motion.div
+              key={activeToast.id}
+              initial={{ width: "100%" }}
+              animate={{ width: "0%" }}
+              transition={{ duration: 10, ease: "linear" }}
+              className="bg-gradient-to-r from-[#10a37f] to-emerald-400 h-full rounded-full"
+            />
           </div>
         </div>
       )}
