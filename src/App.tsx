@@ -2791,30 +2791,6 @@ export default function App() {
               <span>Distribué par</span>
               <span className="font-semibold text-slate-700 group-hover:text-[#10a37f] transition-colors underline decoration-slate-300 group-hover:decoration-[#10a37f]/50 underline-offset-4">WebmasterGO</span>
             </a>
-
-            {isAdmin ? (
-              <>
-                <span className="hidden sm:inline text-slate-300">•</span>
-                <button
-                  onClick={() => setIsExportGuideOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 transition-colors font-semibold border border-slate-200/60"
-                >
-                  <Smartphone className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Exporter App</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="hidden sm:inline text-slate-300">•</span>
-                <button
-                  onClick={() => requireAdmin("Connexion Administrateur requise")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 transition-colors font-semibold border border-amber-200/60"
-                >
-                  <Lock className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Exporter App (Admin)</span>
-                </button>
-              </>
-            )}
           </div>
           
           <button 
